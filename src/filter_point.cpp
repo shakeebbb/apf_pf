@@ -8,7 +8,8 @@
 #include "pcl/kdtree/kdtree_flann.h"
 #include "pcl/common/distances.h"
 #include "pcl/point_representation.h"
-#include <pcl_ros/point_cloud.h>
+#include "pcl_ros/point_cloud.h"
+#include "geometry_msgs/PointStamped.h"
 
 using namespace std;
 
@@ -19,6 +20,7 @@ class particleGridFilter
 		float* allPossibleDistances; 
 		
 		float** transitionModel;
+		discrete_distribution<int>* transitionDists;
 		
 		float discretizationinterval;
 		int discretizationPixels;
@@ -28,6 +30,7 @@ class particleGridFilter
 		int nVoxels;
 		
 		// Observation Features, Changing Every Iteration
+		discrete_distribution<int> voxelDist;
 		pcl::PointXYZ* allPossibleVoxels;
 		int* ptsVoxel;
 		float* distVoxel;
@@ -37,6 +40,12 @@ class particleGridFilter
 		int voxelGridWidth;
 		int voxelGridHeight;
 		int nOutliers;
+		float* obsWeight;
+	
+		int* particleBelief;
+		int nParticles;
+		
+		pcl::PointXYZ maxLikelyPt;
 		
 		// ROS Related
 		//ros::Publisher ptCloudPub;
@@ -73,9 +82,14 @@ class particleGridFilter
 			ptsVoxel = new int[nVoxels];
 			
 			distVoxel = new float[nVoxels];
+			obsWeight = new float[nVoxels];
 			
 			refVoxelDistance = 0;
-			nOutliers = 50;
+			nOutliers = 50; // per voxel
+			
+			nParticles = 50000;
+			particleBelief = new int[nVoxels];
+			fill(particleBelief, particleBelief + nVoxels, nParticles/nVoxels);
 		}
 		
 		// *******************************************************************
@@ -92,11 +106,14 @@ class particleGridFilter
 			delete ptsVoxel;
 			
 			delete distVoxel;
+			delete obsWeight;
+			delete particleBelief;
 		}
 		
 		// *******************************************************************
 		void populate_transition_model()
 		{
+			transitionDists = new discrete_distribution<int>[nVoxels];
 			transitionModel = new float*[nVoxels];
 			for (int i=0; i<nVoxels; i++)
 			{
@@ -144,33 +161,110 @@ class particleGridFilter
 					else
 						transitionModel[i][j] = transitionModel[j][i];
 				}
+				transitionDists[i] = discrete_distribution<int>(transitionModel[i], transitionModel[i]+nVoxels);
 			}
 		}
 		
 		// *******************************************************************
-		// Current State Index ---> Next State index
+		// Current Belief ---> Updated Belief
 		// *******************************************************************
-		int generative_model(int index) 
+		void update_belief() 
 		{
-			discrete_distribution<int> distObject(transitionModel[index], transitionModel[index]+nVoxels);
-			//for (double x:distObject.probabilities()) std::cout << x << " " << endl;
+			//float initial_sum;
+			//return accumulate(transitionModel[index], transitionModel[index]+nVoxels, initial_sum);
+			 
+			 //------ Belief can be zero to 1: better solution?
+			 // --------- belief+nVoxels or belief+nVoxels-1?
 			
-			unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+			// --------voxelDist = discrete_distribution<int>(obsWeight, obsWeight+nVoxels);
+			
+			//for (double x:distObject.probabilities()) std::cout << x << " " << endl;
 			
 			//mt19937 generator;
 			//generator.seed(seed);
 			
-			default_random_engine generator(seed);
+			discrete_distribution<int> beliefDist(particleBelief, particleBelief+nVoxels);
+			fill(particleBelief, particleBelief + nVoxels, 0);
 			
-			return distObject(generator);	
+			unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+			default_random_engine generator(seed);			
+			
+			int associatedWeight[nParticles];
+			int associatedVoxel[nParticles];
+			
+			for (int i=0; i<nParticles; i++)
+			{
+				int sampledIndex = beliefDist(generator);
+				int nextIndex = transitionDists[sampledIndex](generator);
+				
+				associatedVoxel[i] = nextIndex;
+				associatedWeight[i] = obsWeight[nextIndex];
+				
+				//cout << "Associated Weight: " << associatedWeight[i] << endl;
+			}
+			//getchar();
+			discrete_distribution<int> particleDist(associatedWeight, associatedWeight+nParticles);
+			
+			int maxIndex = 0;
+			int maxPart = 0;
+			
+			for (int i=0; i<nParticles; i++)
+			{
+				int sampledIndex = particleDist(generator);
+				particleBelief[associatedVoxel[sampledIndex]]++;
+				
+				//cout << "Associated Voxel: " << associatedVoxel[sampledIndex] << endl;
+				//cout << "N Particles: " << particleBelief[associatedVoxel[sampledIndex]] << endl;
+				//getchar();
+				
+				if (particleBelief[associatedVoxel[sampledIndex]] > maxPart)
+				{
+					maxPart = particleBelief[associatedVoxel[sampledIndex]];
+					maxIndex = associatedVoxel[sampledIndex];
+					
+					//cout << "Max Particles: " <<  maxPart << endl;
+					//cout << "Max Index: " << maxIndex << endl;
+				}
+				
+				//if ((float(particleBelief[sampledIndex])/float(nParticles)) >= 0.0)
+				//{
+				//	cout << associatedVoxel[sampledIndex] << ", " << float(particleBelief[sampledIndex])/float(nParticles) << endl;
+				//}
+				//cout << "... " << endl;
+			}
+			
+			/*
+			for (int i=0; i<nVoxels; i++)
+			{
+				cout << "Number of Voxel Points: " << ptsVoxel[i] << endl;
+				cout << "Distance from Origin: " << distVoxel[i] << endl;
+				cout << "Distance of Nearest Voxel: " << refVoxelDistance << endl;
+				cout << "Distance from Nearest Voxel: " << distVoxel[i] - refVoxelDistance << endl;
+				cout << "Observation Weight: " << obsWeight[i] << endl;
+				cout << "Number of Particles: " << particleBelief[i] << endl << endl;
+			}
+			cout << endl;
+			
+			cout << endl;
+			*/
+			maxLikelyPt = allPossibleVoxels[maxIndex];
+			cout << "Maximum Likely: " << maxLikelyPt << endl;
+			cout << "No. of Points at ML: " << ptsVoxel[maxIndex] << endl; 
 		}
 		
 		// *******************************************************************
 		// Current Belief ---> Randomly Picked State index
 		// *******************************************************************
-		int random_voxel(float* belief)
+		int random_index(float* belief, int size)
 		{
-			discrete_distribution<int> distObject(belief, belief+nVoxels);
+			discrete_distribution<int> distObject(belief, belief+size);
+			
+			cout << "Probabilities: " << "[ ";
+			for(int i=0; i<size; i++)
+			{
+				cout << distObject.probabilities()[i] << ", ";
+			}
+			cout << " ]" << endl;
 			
 			unsigned seed = chrono::system_clock::now().time_since_epoch().count();
 			
@@ -252,6 +346,13 @@ class particleGridFilter
   			refVoxelDistance = distVoxel[indexVox];
   		}
   		
+  		for (int i=0; i<(nVoxels-1); i++)
+  		{
+  			float nearnessWeight = 1 - abs(distVoxel[i] - refVoxelDistance) / (maxDistance - minDistance);
+  			obsWeight[i] = nearnessWeight * ptsVoxel[i];
+  		}
+  		obsWeight[nVoxels-1] = nOutliers;
+
   		//allPossibleVoxels[nVoxels-1] = pcl::PointXYZ(0,0,0);
   		//ptsVoxel[nVoxels-1] = nOutliers;
   		//distVoxel[nVoxels-1] = 0;
@@ -307,7 +408,7 @@ class particleGridFilter
 		}
 		
 		// *******************************************************************
-		void publish_voxels(ros::Publisher& msgPub)
+		void publish_voxels(ros::Publisher& msgPub, ros::Publisher& ptPub)
 		{
 			pcl::PointCloud<pcl::PointXYZ> ptCloudMsg;
 			ptCloudMsg.header.frame_id = "royale_camera_optical_frame";
@@ -320,6 +421,15 @@ class particleGridFilter
 			}
 			pcl_conversions::toPCL(ros::Time::now(), ptCloudMsg.header.stamp);
 			msgPub.publish(ptCloudMsg);
+			
+			geometry_msgs::PointStamped ptMsg;
+			ptMsg.header.stamp = ros::Time::now();
+			ptMsg.header.frame_id = "royale_camera_optical_frame";
+			ptMsg.point.x = maxLikelyPt.x;
+			ptMsg.point.y = maxLikelyPt.y;
+			ptMsg.point.z = maxLikelyPt.z;
+			
+			ptPub.publish(ptMsg);		
 			
 			//cout << "Points Each Voxel: " << endl;
 			//for (int i=0; i<nVoxels; i++)
@@ -362,10 +472,12 @@ class particleGridFilter
 void pointCb(const sensor_msgs::PointCloud2&);
 
 ros::Publisher ptCloudPub;
+ros::Publisher ptPub;
 
 // *******************************************************************
 
-particleGridFilter pgf(0.1, 15, 0.1, 2.00, 171, 224);
+// Distance Interval, Pixel Interval, Min Distance, Max Distance, Image Height, Image Width
+particleGridFilter pgf(0.25, 70, 0.15, 1.5, 171, 224); 
 	
 int main(int argc, char** argv)
 {
@@ -374,6 +486,7 @@ int main(int argc, char** argv)
 
 	ros::Subscriber pointSub = nh.subscribe("/royale_camera_driver/point_cloud", 100, pointCb);
 	ptCloudPub = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>("cloud_out", 100);
+	ptPub = nh.advertise<geometry_msgs::PointStamped>("point_out", 100);
 	
 	pgf.populate_transition_model();
 	//pgf.display(2);
@@ -448,10 +561,15 @@ void pointCb(const sensor_msgs::PointCloud2& msg)
    // printf ("\t(%f, %f, %f)\n", pt.x, pt.y, pt.z);
 	
 	pgf.extract_features(ptCloud);
-	pgf.publish_voxels(ptCloudPub);
+	pgf.publish_voxels(ptCloudPub, ptPub);
 	
-	for (int i=0; i < 1000; i++)
-	pgf.generative_model(5);
+	//float dummyBelief[6] = {1,0,2,0,2,3};
+	
+	//for(int i=0; i<20; i++)
+	//cout << pgf.random_index(dummyBelief, 6) << ", ";
+	//cout << endl;
+	
+	pgf.update_belief();
 	
 	ros::Duration elapsed = ros::Time::now() - begin;
 	ROS_INFO("Time Elapsed: %f", elapsed.toSec());
