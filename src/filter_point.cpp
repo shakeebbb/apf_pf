@@ -1,583 +1,371 @@
-#include "ros/ros.h"
-#include <random>
-#include <chrono>
-#include "sensor_msgs/PointCloud2.h"
-#include "pcl/PCLPointCloud2.h"
-#include "pcl/point_cloud.h"
-#include "pcl_conversions/pcl_conversions.h"
-#include "pcl/kdtree/kdtree_flann.h"
-#include "pcl/common/distances.h"
-#include "pcl/point_representation.h"
-#include "pcl_ros/point_cloud.h"
-#include "geometry_msgs/PointStamped.h"
+#include "filter_point.h"
 
-using namespace std;
-
-class particleGridFilter
-{		
-		// Array of all possible grid combinations, each grid is an integer
-		// Array of all possible evidence combinations, each observation is an integer
-		float* allPossibleDistances; 
-		
-		float** transitionModel;
-		discrete_distribution<int>* transitionDists;
-		
-		float discretizationinterval;
-		int discretizationPixels;
-		float minDistance;
-		float maxDistance;
-		int nDistances;
-		int nVoxels;
-		
-		// Observation Features, Changing Every Iteration
-		discrete_distribution<int> voxelDist;
-		pcl::PointXYZ* allPossibleVoxels;
-		int* ptsVoxel;
-		float* distVoxel;
-		float refVoxelDistance;
-		int imageWidth;
-		int imageHeight;
-		int voxelGridWidth;
-		int voxelGridHeight;
-		int nOutliers;
-		float* obsWeight;
-	
-		int* particleBelief;
-		int nParticles;
-		
-		pcl::PointXYZ maxLikelyPt;
-		
-		// ROS Related
-		//ros::Publisher ptCloudPub;
-		
-	public:
-		// *******************************************************************
-		particleGridFilter(float discIntZ, int discIntXY, float minDist, float maxDist, int imgHeight, int imgWidth) // Discretization Interval, Sensing Horizon
-		{
-			//ptCloudPub = nh->advertise<sensor_msgs::PointCloud2>("cloud_out", 100);
-		
-			discretizationinterval = discIntZ;
-			discretizationPixels = discIntXY;
-			minDistance = minDist;
-			maxDistance = maxDist;
-			imageWidth = imgWidth;
-			imageHeight = imgHeight;
-			
-			nDistances = ceil((maxDistance - minDistance)/discretizationinterval + 1);
-			allPossibleDistances = new float[nDistances];
-			
-			for (int i=0; i<nDistances; i++)
-			allPossibleDistances[i] = minDistance + (i*discretizationinterval);
-			
-			voxelGridWidth = ceil(float(imgWidth)/float(discIntXY));
-			voxelGridHeight = ceil(float(imgHeight)/float(discIntXY));
-			
-			nVoxels = voxelGridWidth*voxelGridHeight*nDistances + 1;
-			cout << voxelGridWidth << endl;
-			cout << voxelGridHeight << endl;
-			cout << nDistances << endl;
-			cout << nVoxels << endl;
-			getchar();
-			allPossibleVoxels = new pcl::PointXYZ[nVoxels];
-			ptsVoxel = new int[nVoxels];
-			
-			distVoxel = new float[nVoxels];
-			obsWeight = new float[nVoxels];
-			
-			refVoxelDistance = 0;
-			nOutliers = 50; // per voxel
-			
-			nParticles = 50000;
-			particleBelief = new int[nVoxels];
-			fill(particleBelief, particleBelief + nVoxels, nParticles/nVoxels);
-		}
-		
-		// *******************************************************************
-		~particleGridFilter()
-		{
-			delete allPossibleDistances;
-			
-			for (int i=0; i<nDistances; i++)
-			delete transitionModel[i];
-			delete transitionModel;
-			
-			delete allPossibleVoxels;
-			
-			delete ptsVoxel;
-			
-			delete distVoxel;
-			delete obsWeight;
-			delete particleBelief;
-		}
-		
-		// *******************************************************************
-		void populate_transition_model()
-		{
-			transitionDists = new discrete_distribution<int>[nVoxels];
-			transitionModel = new float*[nVoxels];
-			for (int i=0; i<nVoxels; i++)
-			{
-				transitionModel[i] = new float[nVoxels];
-				for (int j=0; j<nVoxels; j++)
-				{
-					int indexVoxZ1 = floor(float(i) / float(voxelGridWidth*voxelGridHeight));
-					int indexVoxY1 = floor(float(i - indexVoxZ1*voxelGridWidth*voxelGridHeight) / float(voxelGridWidth));
-					int indexVoxX1 = i - indexVoxZ1*voxelGridWidth*voxelGridHeight - indexVoxY1*voxelGridWidth;	
-							
-					int indexVoxZ2 = floor(float(j) / float(voxelGridWidth*voxelGridHeight));
-					int indexVoxY2 = floor(float(j - indexVoxZ2*voxelGridWidth*voxelGridHeight) / float(voxelGridWidth));
-					int indexVoxX2 = j - indexVoxZ2*voxelGridWidth*voxelGridHeight - indexVoxY2*voxelGridWidth;
-					
-					int indexVoxZC = 0;
-					int indexVoxYC = voxelGridHeight/2;
-					int indexVoxXC = voxelGridWidth/2;					
-					
-					int manDistMax = abs(voxelGridWidth) + abs(voxelGridHeight) + abs(nDistances);
-					
-					if (i == (nVoxels-1))
-					{
-						int manDist = abs(indexVoxX2 - indexVoxXC) + abs(indexVoxY2 - indexVoxYC) + abs(indexVoxZ2 - indexVoxZC);
-						transitionModel[i][j] = float(manDist) / float(manDistMax); 
-					}
-					else if (j == (nVoxels-1))
-					{
-						int manDist = abs(indexVoxX1 - indexVoxXC) + abs(indexVoxY1 - indexVoxYC) + abs(indexVoxZ1 - indexVoxZC);
-						transitionModel[i][j] = float(manDist) / float(manDistMax); // Can be made less conservative manDist << manDistMax
-					}
-					else if (j >= i)
-					{	
-						//cout << "(i, j) = " << i << ", " << j << endl;
-						//cout << "(Width, Height) = " << voxelGridWidth << ", " << voxelGridHeight << endl;						
-						//cout << "(vx, vy, vz) = " << indexVoxX1 << ", " << indexVoxY1 << ", " << indexVoxZ1 << endl;
-						//cout << "(vx, vy, vz) = " << indexVoxX2 << ", " << indexVoxY2 << ", " << indexVoxZ2 << endl;
-						int manDist = abs(indexVoxX2 - indexVoxX1) + abs(indexVoxY2 - indexVoxY1) + abs(indexVoxZ2 - indexVoxZ1);
-						//cout << manDist << endl;
-						//cout << manDistMax << endl;
-						//getchar();
-
-						transitionModel[i][j] = 1 - float(manDist) / float(manDistMax);
-						//abs(allPossibleDistances[j] - allPossibleDistances[i])/(maxDistance - minDistance);
-					}
-					else
-						transitionModel[i][j] = transitionModel[j][i];
-				}
-				transitionDists[i] = discrete_distribution<int>(transitionModel[i], transitionModel[i]+nVoxels);
-			}
-		}
-		
-		// *******************************************************************
-		// Current Belief ---> Updated Belief
-		// *******************************************************************
-		void update_belief() 
-		{
-			//float initial_sum;
-			//return accumulate(transitionModel[index], transitionModel[index]+nVoxels, initial_sum);
-			 
-			 //------ Belief can be zero to 1: better solution?
-			 // --------- belief+nVoxels or belief+nVoxels-1?
-			
-			// --------voxelDist = discrete_distribution<int>(obsWeight, obsWeight+nVoxels);
-			
-			//for (double x:distObject.probabilities()) std::cout << x << " " << endl;
-			
-			//mt19937 generator;
-			//generator.seed(seed);
-			
-			discrete_distribution<int> beliefDist(particleBelief, particleBelief+nVoxels);
-			fill(particleBelief, particleBelief + nVoxels, 0);
-			
-			unsigned seed = chrono::system_clock::now().time_since_epoch().count();
-			default_random_engine generator(seed);			
-			
-			int associatedWeight[nParticles];
-			int associatedVoxel[nParticles];
-			
-			for (int i=0; i<nParticles; i++)
-			{
-				int sampledIndex = beliefDist(generator);
-				int nextIndex = transitionDists[sampledIndex](generator);
-				
-				associatedVoxel[i] = nextIndex;
-				associatedWeight[i] = obsWeight[nextIndex];
-				
-				//cout << "Associated Weight: " << associatedWeight[i] << endl;
-			}
-			//getchar();
-			discrete_distribution<int> particleDist(associatedWeight, associatedWeight+nParticles);
-			
-			int maxIndex = 0;
-			int maxPart = 0;
-			
-			for (int i=0; i<nParticles; i++)
-			{
-				int sampledIndex = particleDist(generator);
-				particleBelief[associatedVoxel[sampledIndex]]++;
-				
-				//cout << "Associated Voxel: " << associatedVoxel[sampledIndex] << endl;
-				//cout << "N Particles: " << particleBelief[associatedVoxel[sampledIndex]] << endl;
-				//getchar();
-				
-				if (particleBelief[associatedVoxel[sampledIndex]] > maxPart)
-				{
-					maxPart = particleBelief[associatedVoxel[sampledIndex]];
-					maxIndex = associatedVoxel[sampledIndex];
-					
-					//cout << "Max Particles: " <<  maxPart << endl;
-					//cout << "Max Index: " << maxIndex << endl;
-				}
-				
-				//if ((float(particleBelief[sampledIndex])/float(nParticles)) >= 0.0)
-				//{
-				//	cout << associatedVoxel[sampledIndex] << ", " << float(particleBelief[sampledIndex])/float(nParticles) << endl;
-				//}
-				//cout << "... " << endl;
-			}
-			
-			/*
-			for (int i=0; i<nVoxels; i++)
-			{
-				cout << "Number of Voxel Points: " << ptsVoxel[i] << endl;
-				cout << "Distance from Origin: " << distVoxel[i] << endl;
-				cout << "Distance of Nearest Voxel: " << refVoxelDistance << endl;
-				cout << "Distance from Nearest Voxel: " << distVoxel[i] - refVoxelDistance << endl;
-				cout << "Observation Weight: " << obsWeight[i] << endl;
-				cout << "Number of Particles: " << particleBelief[i] << endl << endl;
-			}
-			cout << endl;
-			
-			cout << endl;
-			*/
-			maxLikelyPt = allPossibleVoxels[maxIndex];
-			cout << "Maximum Likely: " << maxLikelyPt << endl;
-			cout << "No. of Points at ML: " << ptsVoxel[maxIndex] << endl; 
-		}
-		
-		// *******************************************************************
-		// Current Belief ---> Randomly Picked State index
-		// *******************************************************************
-		int random_index(float* belief, int size)
-		{
-			discrete_distribution<int> distObject(belief, belief+size);
-			
-			cout << "Probabilities: " << "[ ";
-			for(int i=0; i<size; i++)
-			{
-				cout << distObject.probabilities()[i] << ", ";
-			}
-			cout << " ]" << endl;
-			
-			unsigned seed = chrono::system_clock::now().time_since_epoch().count();
-			
-			default_random_engine generator(seed);
-			
-			return distObject(generator);	
-		} 
-		
-		// *******************************************************************
-		// Next State Index, PCL Points, Number of Points in PCL at (sp +- epsilon), 
-		// Distance of sp to the Camera Closest Point in PCL  ---> Weight of the State-Obsv Pair
-		// *******************************************************************
-		void evidence_weight(int distIndex, float& densityWeight, float& nearnessWeight)
-		{	
-		/*
-			if (repPoints[distIndex][3] == -1 && repPoints[distIndex][4] == -1)
-			{
-				densityWeight = 0;
-				nearnessWeight = 0;
-			}
-			else
-			{			
-				densityWeight = repPoints[distIndex][4]; 
-				nearnessWeight = ( 1 - abs(repPoints[distIndex][3] - nearestPoint[3])/(maxDistance - minDistance) );
-			}
-			
-			cout << "Density Weight: " << densityWeight << endl;
-			cout << "Nearness Weight: " << nearnessWeight << endl;
-			*/
-		}
-		
-		// *******************************************************************
-		// PCL, epsilon --> Number of Points at (s+- epsilon) of each state, 
-		// Closest Point Distance 
-		// *******************************************************************
-		void extract_features(pcl::PointCloud<pcl::PointXYZ>& ptCloud)
-		{
-			fill(allPossibleVoxels, allPossibleVoxels + nVoxels, pcl::PointXYZ(0,0,0));
-			fill(ptsVoxel, ptsVoxel + nVoxels, 0);
-			fill(distVoxel, distVoxel + nVoxels, 0);
-			refVoxelDistance = maxDistance;
-  			
-  		int indexVox;
-  		float distVox;
-  		int nValidPts = 0;
-  		
-			for (int i=0; i<ptCloud.size(); i++)
-			{
-				if(!is_valid(ptCloud[i]))
-				continue;
-				
-				nValidPts++;
-  			if(!point_to_voxel(ptCloud[i], i, indexVox, distVox))
-  			continue;
-  			
-  			//cout << i << endl;
-  			//cout << "Image Width: " << imageWidth << endl;
-  			//cout << "Point Index: " << i << endl;
-  			//cout << "Point X: " << ptCloud[i].x << endl;
-  			//cout << "Point Y: " << ptCloud[i].y << endl;
-  			//cout << "Point Z: " << ptCloud[i].z << endl;
-  			//cout << "Voxel Index: " << indexVox << endl;
-  			//cout << "Voxel Distance: " << distVox << endl;
-  			//getchar();
-  			
-  			//if(indexVox >= nVoxels)
-  			//{	
-  				//cout << voxelGridWidth*voxelGridHeight*nDistances << endl;
-  				//cout << nVoxels << endl;
-  				//cout << indexVox << endl << endl;
-  				//getchar();
-  			//}
-  			ptsVoxel[indexVox] ++;
-  			//cout << "Points in Voxel " << indexVox << " = " << ptsVoxel[indexVox] << endl;
-  			allPossibleVoxels[indexVox] = ptCloud[i];
-  			distVoxel[indexVox] = distVox;
-  				
-  			if(distVoxel[indexVox] < refVoxelDistance)
-  			refVoxelDistance = distVoxel[indexVox];
-  		}
-  		
-  		for (int i=0; i<(nVoxels-1); i++)
-  		{
-  			float nearnessWeight = 1 - abs(distVoxel[i] - refVoxelDistance) / (maxDistance - minDistance);
-  			obsWeight[i] = nearnessWeight * ptsVoxel[i];
-  		}
-  		obsWeight[nVoxels-1] = nOutliers;
-
-  		//allPossibleVoxels[nVoxels-1] = pcl::PointXYZ(0,0,0);
-  		//ptsVoxel[nVoxels-1] = nOutliers;
-  		//distVoxel[nVoxels-1] = 0;
-		}
-		
-		// *******************************************************************
-		// PCL Point --> State Index To Which The Point Belongs
-		// *******************************************************************
-		bool point_to_voxel(pcl::PointXYZ& pt, int& indexPt, int& indexVox, float& distVox)
-		{
-			//distVox = abs(pt.x) + abs(pt.y) + abs(pt.z);
-			
-			distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
-			
-			if((distVox > maxDistance) || (distVox < minDistance))
-			return false;
-			
-			int indexVoxX = floor(float(indexPt % imageWidth) / float(discretizationPixels));
-			int indexVoxY = floor(floor(float(indexPt)/float(imageWidth)) / float(discretizationPixels));
-			int indexVoxZ = floor((distVox - minDistance) /  discretizationinterval);
-			/*
-			cout << "Voxel Grid Size: " << voxelGridWidth << ", "
-			  													<< voxelGridHeight << ", "
-			  													<< nDistances << endl;
-			cout << "Voxel Grid Point: " << indexVoxX << ", "
-			  													<< indexVoxY << ", "
-			  													<< indexVoxZ << endl;
-			*/
-			if(indexVoxX > ceil(imageWidth/discretizationPixels))
-			cout << indexVoxX << endl;
-			if(indexVoxY > ceil(imageHeight/discretizationPixels))
-			cout << indexVoxY << endl;
-			if(indexVoxZ > nDistances)
-			cout << indexVoxZ << endl;
-			
-			indexVox = indexVoxX + voxelGridWidth*(indexVoxY + voxelGridHeight*indexVoxZ);
-			
-			return true;
-		
-			//pointDistance = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), inPoint);
-			//pointState = ceil( (pointDistance - minDistance) / discretizationinterval );
-			
-			//if(pointState >= nDistances)
-			//pointState = nDistances-1;
-			//if(pointState < 0)
-			//pointState = 0;
-		}
-		
-		// *******************************************************************
-		bool is_valid(pcl::PointXYZ& point)
-		{
-			return !(isnan(point.x) || isnan(point.y) || isnan(point.z));
-		}
-		
-		// *******************************************************************
-		void publish_voxels(ros::Publisher& msgPub, ros::Publisher& ptPub)
-		{
-			pcl::PointCloud<pcl::PointXYZ> ptCloudMsg;
-			ptCloudMsg.header.frame_id = "royale_camera_optical_frame";
-			ptCloudMsg.height = 1;
-			ptCloudMsg.width = nVoxels;
-			
-			for (int i=0; i<nVoxels; i++)
-			{
-				ptCloudMsg.points.push_back(allPossibleVoxels[i]);
-			}
-			pcl_conversions::toPCL(ros::Time::now(), ptCloudMsg.header.stamp);
-			msgPub.publish(ptCloudMsg);
-			
-			geometry_msgs::PointStamped ptMsg;
-			ptMsg.header.stamp = ros::Time::now();
-			ptMsg.header.frame_id = "royale_camera_optical_frame";
-			ptMsg.point.x = maxLikelyPt.x;
-			ptMsg.point.y = maxLikelyPt.y;
-			ptMsg.point.z = maxLikelyPt.z;
-			
-			ptPub.publish(ptMsg);		
-			
-			//cout << "Points Each Voxel: " << endl;
-			//for (int i=0; i<nVoxels; i++)
-			//{	
-			//	if(ptsVoxel[i] > 0)
-			//	cout << ptsVoxel[i] << ", ";
-			//}
-			//cout << endl;
-			//ptCloudMsg.row_step = ceil(imageWidth/discretizationPixels);
-		}
-		
-		// *******************************************************************
-		void display(int precision)
-		{
-			cout << setprecision(precision) << endl;
-			cout << "<===============================================>" << endl; 
-			cout << "Number of possible states: " << nVoxels << endl;
-			cout << "All possible states: [";
-			for (int i=0; i<(nVoxels-1); i++)
-			{
-				cout << allPossibleVoxels[i] << ", ";
-			}
-			cout << allPossibleVoxels[nVoxels-1] << "]" << endl;
-			cout << "Transition Model: " << endl;
-			for (int i=0; i<nVoxels; i++)
-			{
-				for (int j=0; j<nVoxels; j++)
-				{
-					cout << transitionModel[i][j] << "\t";
-				}
-				cout << endl;
-			}
-			
-			ROS_INFO("%f", transitionModel[1][2]);
-			cout << endl << endl;
-		}
-};
-
-// *******************************************************************
-void pointCb(const sensor_msgs::PointCloud2&);
-
-ros::Publisher ptCloudPub;
-ros::Publisher ptPub;
-
-// *******************************************************************
-
-// Distance Interval, Pixel Interval, Min Distance, Max Distance, Image Height, Image Width
-particleGridFilter pgf(0.25, 70, 0.15, 1.5, 171, 224); 
-	
-int main(int argc, char** argv)
+// ***************************************************************************
+filter_point_class::filter_point_class(ros::NodeHandle* nh)
 {
-	ros::init(argc, argv, "filter_point");
-	ros::NodeHandle nh;
-
-	ros::Subscriber pointSub = nh.subscribe("/royale_camera_driver/point_cloud", 100, pointCb);
-	ptCloudPub = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>("cloud_out", 100);
-	ptPub = nh.advertise<geometry_msgs::PointStamped>("point_out", 100);
+	wait_for_params(nh);	
 	
-	pgf.populate_transition_model();
-	//pgf.display(2);
-
-	//particleGridFilter pgf(0.05, 0.15, 0.35);
-	//pgf.populate_transition_model();
-	//pgf.display(2);
+	ptCloudSub_ = nh->subscribe("filter_point_node/pt_cloud_in", 100, &filter_point_class::pt_cloud_cb, this);
 	
-	//for (int i=0; i<3500; i=i+50)
-	//cout << "Observation Weight: " << pgf.evidence_weight(1, 38304, i, 0.15) << endl;
+	isInitialized_ = false;
 	
-	/*
-	int count[5];
-	count[0] = 0;
-	count[1] = 0;
-	count[2] = 0;
-	count[3] = 0;
-	count[4] = 0;
-	count[5] = 0;
-	for (int i=0; i<500; i++)
-	{
-		int k = pgf.generative_model(1);
-		//cout << "Current Index: " << 1 << endl;
-		//cout << "Next Index: " << k << endl << endl;
-		count[k] ++;
-	}
-	for (int i=0; i<5; i++)
-	{
-		for (int j=0; j<count[i]; j++)
-		cout << "*";
-		cout << endl;
-	}
-	cout << endl;
-	*/
+	ROS_INFO("Waiting for the input point cloud ...");
+	while(!isInitialized_)
+	ros::spinOnce();
 	
-	ros::spin();
-
-	return 0;
+	std::cout << "," << std::endl;
+	ptVizPub_ = nh->advertise<visualization_msgs::Marker>("filter_point_node/pt_cloud_viz", 100);
+	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_out", 100);
+	
+	std::cout << "," << std::endl;
+	distArrSize_ = ceil((maxDist_ - minDist_)/discInt_ + 1);
+	distArr_ = new float[distArrSize_];
+	
+	std::cout << "," << std::endl;
+	for (int i=0; i<distArrSize_; i++)
+	distArr_[i] = minDist_ + (i*discInt_);
+			
+	voxGridWidth_ = ceil(float(imgWidth_)/float(discPix_));
+	voxGridHeight_ = ceil(float(imgHeight_)/float(discPix_));
+	
+	std::cout << "," << std::endl;
+	voxArrSize_ = voxGridWidth_*voxGridHeight_*distArrSize_ + 1;
+	voxArr_ = new pcl::PointXYZ[voxArrSize_];
+	ptsVox_ = new int[voxArrSize_];
+	distVox_ = new float[voxArrSize_];
+	obsWeight_ = new float[voxArrSize_];
+			
+	distVoxPiv_ = 0;
+	nOutliers_ = 50; // per voxel
+	
+	std::cout << "," << std::endl;
+	beliefArr_ = new int[voxArrSize_];
+	std::fill(beliefArr_, beliefArr_ + voxArrSize_, partArrSize_/voxArrSize_);
+	
+	populate_transition_model();
 }
 
-
-// *******************************************************************
-void pointCb(const sensor_msgs::PointCloud2& msg)
+// ***************************************************************************
+filter_point_class::~filter_point_class()
 {
+	delete distArr_;
+			
+	for (int i=0; i<distArrSize_; i++)
+	delete transModel_[i];
+	delete transModel_;
+	
+	delete voxArr_;		
+	delete ptsVox_;
+	delete distVox_;
+	delete obsWeight_;
+	delete beliefArr_;
+}
 
-	cout << "Frame Id: " << msg.header.frame_id << endl;
-	cout << "Height: " << msg.height << endl;
-	cout << "Width: " << msg.width << endl;
+// ***************************************************************************
+void filter_point_class::wait_for_params(ros::NodeHandle *nh)
+{
+	while(!nh->getParam("filter_point_node/distance_interval", discInt_));
+	while(!nh->getParam("filter_point_node/pixel_interval", discPix_));
+	while(!nh->getParam("filter_point_node/min_distance", minDist_));
+	while(!nh->getParam("filter_point_node/max_distance", maxDist_));
+	while(!nh->getParam("filter_point_node/n_particles", partArrSize_));
 	
-	cout << "Fields Size: " << msg.fields.size() << endl;
-	
-	cout << "Is_bigendian: " << int(msg.is_bigendian) << endl;
-	
-	cout << "Point Step: " << msg.point_step << endl;
-	cout << "Row Step: " << msg.row_step << endl;
-	
-	cout << "Data Size: " << msg.data.size() << endl;
-	
-	cout << "Is_dense: " << int(msg.is_dense) << endl;
+	ROS_INFO("Parameters for filter_point retreived from the parameter server");
+}
 
+// ***************************************************************************
+void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& msgPtr)
+{
 	ros::Time begin = ros::Time::now();
 	
-	pcl::PCLPointCloud2 pclMsg;
-	pcl::PointCloud<pcl::PointXYZ> ptCloud;
+	if(msgPtr->height == 1)
+	{
+		ROS_WARN("Input point cloud is unordered");
+		return;
+	}
 	
-	pcl_conversions::toPCL (msg, pclMsg);
-	pcl::fromPCLPointCloud2 (pclMsg, ptCloud);
+	if(isInitialized_)
+	{
+		extract_features(msgPtr);
+		update_belief();
+		publish_voxels();
+		//display(3);
+	}
 	
-	cout << "Pt_cloud Size: " << ptCloud.size() << endl << endl;
-	
-	//BOOST_FOREACH (const pcl::PointXYZ& pt, ptCloud)
-   // printf ("\t(%f, %f, %f)\n", pt.x, pt.y, pt.z);
-	
-	pgf.extract_features(ptCloud);
-	pgf.publish_voxels(ptCloudPub, ptPub);
-	
-	//float dummyBelief[6] = {1,0,2,0,2,3};
-	
-	//for(int i=0; i<20; i++)
-	//cout << pgf.random_index(dummyBelief, 6) << ", ";
-	//cout << endl;
-	
-	pgf.update_belief();
+	if(!isInitialized_)
+	{
+		ROS_INFO("Frame Id: %s", msgPtr->header.frame_id.c_str());
+		ROS_INFO("Image Height: %i", msgPtr->height);
+		ROS_INFO("Image Width: %i", msgPtr->width);
+		ROS_INFO("Data Size: %lu", msgPtr->points.size());
+		ROS_INFO("Is Dense: %i", msgPtr->is_dense);
+		
+		frameId_ = msgPtr->header.frame_id;
+		imgWidth_ = msgPtr->width;
+		imgHeight_ = msgPtr->height;
+		
+		isInitialized_ = true;
+	}
 	
 	ros::Duration elapsed = ros::Time::now() - begin;
 	ROS_INFO("Time Elapsed: %f", elapsed.toSec());
-	
-	//float densityWeight, nearnessWeight;
-	//pgf.evidence_weight(1, densityWeight, nearnessWeight);
-	
-	//cout << "Density Weight: " << densityWeight << endl;
-	//cout << "Nearness Weight: " << nearnessWeight << endl;
-	
 }
+
+// ***************************************************************************
+void filter_point_class::populate_transition_model()
+{
+	transDistr_ = new std::discrete_distribution<int>[voxArrSize_];
+	transModel_ = new float*[voxArrSize_];
+	for (int i=0; i<voxArrSize_; i++)
+	{
+		transModel_[i] = new float[voxArrSize_];
+		for (int j=0; j<voxArrSize_; j++)
+		{
+			int indexVoxZ1 = floor(float(i) / float(voxGridWidth_*voxGridHeight_));
+			int indexVoxY1 = floor(float(i - indexVoxZ1*voxGridWidth_*voxGridHeight_) / float(voxGridWidth_));
+			int indexVoxX1 = i - indexVoxZ1*voxGridWidth_*voxGridHeight_ - indexVoxY1*voxGridWidth_;	
+							
+			int indexVoxZ2 = floor(float(j) / float(voxGridWidth_*voxGridHeight_));
+			int indexVoxY2 = floor(float(j - indexVoxZ2*voxGridWidth_*voxGridHeight_) / float(voxGridWidth_));
+			int indexVoxX2 = j - indexVoxZ2*voxGridWidth_*voxGridHeight_ - indexVoxY2*voxGridWidth_;
+					
+			int indexVoxZC = 0;
+			int indexVoxYC = voxGridHeight_/2;
+			int indexVoxXC = voxGridWidth_/2;					
+					
+			int manDistMax = abs(voxGridWidth_) + abs(voxGridHeight_) + abs(distArrSize_);
+					
+			if (i == (voxArrSize_-1))
+			{
+				int manDist = abs(indexVoxX2 - indexVoxXC) + abs(indexVoxY2 - indexVoxYC) + abs(indexVoxZ2 - indexVoxZC);
+				transModel_[i][j] = float(manDist) / float(manDistMax); 
+			}
+			else if (j == (voxArrSize_-1))
+			{
+				int manDist = abs(indexVoxX1 - indexVoxXC) + abs(indexVoxY1 - indexVoxYC) + abs(indexVoxZ1 - indexVoxZC);
+				transModel_[i][j] = float(manDist) / float(manDistMax); // Can be made less conservative manDist << manDistMax
+			}
+			else if (j >= i)
+			{	
+				int manDist = abs(indexVoxX2 - indexVoxX1) + abs(indexVoxY2 - indexVoxY1) + abs(indexVoxZ2 - indexVoxZ1);
+
+				transModel_[i][j] = 1 - float(manDist) / float(manDistMax);
+			}
+			else
+				transModel_[i][j] = transModel_[j][i];
+		}
+			transDistr_[i] = std::discrete_distribution<int>(transModel_[i], transModel_[i]+voxArrSize_);
+	}
+}
+
+// ***************************************************************************
+void filter_point_class::update_belief() 
+	{
+	//------ Belief can be zero to 1: better solution?
+	// --------voxelDist = discrete_distribution<int>(obsWeight, obsWeight+nVoxels);
+	//mt19937 generator;
+	//generator.seed(seed);
+			
+	std::discrete_distribution<int> beliefDist(beliefArr_, beliefArr_+voxArrSize_);
+	std::fill(beliefArr_, beliefArr_ + voxArrSize_, 0);
+			
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);			
+			
+	int associatedWeight[partArrSize_];
+	int associatedVoxel[partArrSize_];
+			
+	for (int i=0; i<partArrSize_; i++)
+	{
+		int sampledIndex = beliefDist(generator);
+		int nextIndex = transDistr_[sampledIndex](generator);
+				
+		associatedVoxel[i] = nextIndex;
+		associatedWeight[i] = obsWeight_[nextIndex];
+	}
+	
+	std::discrete_distribution<int> particleDist(associatedWeight, associatedWeight+partArrSize_);
+			
+	int maxIndex = 0;
+	int maxPart = 0;
+			
+	for (int i=0; i<partArrSize_; i++)
+	{
+		int sampledIndex = particleDist(generator);
+		beliefArr_[associatedVoxel[sampledIndex]]++;
+				
+		if (beliefArr_[associatedVoxel[sampledIndex]] > maxPart)
+		{
+			maxPart = beliefArr_[associatedVoxel[sampledIndex]];
+			maxIndex = associatedVoxel[sampledIndex];
+		}
+	}
+	
+	domPt_ = voxArr_[maxIndex];	
+}
+
+// ***************************************************************************
+int filter_point_class::random_index(float* belief, int& size)
+{
+	std::discrete_distribution<int> distObject(belief, belief+size);
+	std::cout << "Probabilities: " << "[ ";
+	
+	for(int i=0; i<size; i++)
+		std::cout << distObject.probabilities()[i] << ", ";
+	std::cout << " ]" << std::endl;
+			
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			
+	std::default_random_engine generator(seed);
+			
+	return distObject(generator);	
+} 
+		
+// ***************************************************************************
+void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& ptCloudPtr)
+{
+	std::fill(voxArr_, voxArr_ + voxArrSize_, pcl::PointXYZ(0,0,0));
+	std::fill(ptsVox_, ptsVox_ + voxArrSize_, 0);
+	std::fill(distVox_, distVox_ + voxArrSize_, 0);
+	distVoxPiv_ = maxDist_;
+  			
+  int indexVox;
+  float distVox;
+  int nValidPts = 0;
+  		
+	for (int i=0; i<ptCloudPtr->size(); i++)
+	{
+		if(!is_valid(ptCloudPtr->points[i]))
+		continue;
+				
+		nValidPts++;
+  	if(!point_to_voxel(ptCloudPtr->points[i], i, indexVox, distVox))
+  	continue;
+
+  	ptsVox_[indexVox] ++;
+  	voxArr_[indexVox] = ptCloudPtr->points[i];
+  	distVox_[indexVox] = distVox;
+  				
+  	if(distVox_[indexVox] < distVoxPiv_)
+  	distVoxPiv_ = distVox_[indexVox];
+  }
+  		
+  for (int i=0; i<(voxArrSize_-1); i++)
+  {
+  	float nearnessWeight = 1 - abs(distVox_[i] - distVoxPiv_) / (maxDist_ - minDist_);
+  	obsWeight_[i] = nearnessWeight * ptsVox_[i];
+  }
+  obsWeight_[voxArrSize_-1] = nOutliers_;
+}
+		
+// ***************************************************************************
+bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, int& indexVox, float& distVox)
+{
+	distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
+			
+	if((distVox > maxDist_) || (distVox < minDist_))
+	return false;
+			
+	int indexVoxX = floor(float(indexPt % imgWidth_) / float(discPix_));
+	int indexVoxY = floor(floor(float(indexPt)/float(imgWidth_)) / float(discPix_));
+	int indexVoxZ = floor((distVox - minDist_) /  discInt_);
+			
+	indexVox = indexVoxX + voxGridWidth_*(indexVoxY + voxGridHeight_*indexVoxZ);
+			
+	return true;
+}
+		
+// ***************************************************************************
+bool filter_point_class::is_valid(const pcl::PointXYZ& point)
+{
+	return !(isnan(point.x) || isnan(point.y) || isnan(point.z));
+}
+		
+// ***************************************************************************
+void filter_point_class::publish_voxels()
+{
+	visualization_msgs::Marker markerMsg;
+	
+	markerMsg.header.frame_id = frameId_;
+	markerMsg.header.stamp = ros::Time::now();
+	markerMsg.type = visualization_msgs::Marker::CUBE_LIST;
+	markerMsg.action = visualization_msgs::Marker::ADD;
+	markerMsg.lifetime = ros::Duration(0);
+	markerMsg.frame_locked = true;
+	
+	geometry_msgs::Pose pose;
+	pose.orientation.w = 1;
+	markerMsg.pose = pose;
+	
+	geometry_msgs::Vector3 scale;
+	scale.x = 0.05;
+	scale.y = 0.05;
+	scale.z = 0.05;
+	markerMsg.scale = scale;
+	
+	markerMsg.ns = "filter_point";
+	for (int i=0; i<voxArrSize_; i++)
+	{
+		markerMsg.id = i;
+		
+		geometry_msgs::Point pt;
+		pt.x = voxArr_[i].x; 
+		pt.y = voxArr_[i].y;
+		pt.z = voxArr_[i].z;
+		markerMsg.points.push_back(pt);
+		
+		//float shade = float(beliefArr_[i])/float(partArrSize_);
+		
+		std_msgs::ColorRGBA color;
+		color.r = 0; 
+		color.g = 0; 
+		color.b = 1; 
+		color.a = 1;
+		markerMsg.colors.push_back(color);
+	}
+	
+	ptVizPub_.publish(markerMsg);
+			
+	geometry_msgs::PointStamped ptMsg;
+	ptMsg.header.stamp = ros::Time::now();
+	ptMsg.header.frame_id = frameId_;
+	ptMsg.point.x = domPt_.x;
+	ptMsg.point.y = domPt_.y;
+	ptMsg.point.z = domPt_.z;
+
+	ptPub_.publish(ptMsg);		
+}
+		
+// ***************************************************************************
+void filter_point_class::display(int precision)
+{
+	std::cout << std::setprecision(precision) << std::endl;
+	std::cout << "<===============================================>" << std::endl; 
+	std::cout << "Number of possible states: " << voxArrSize_ << std::endl;
+	std::cout << "All possible states: [";
+	for (int i=0; i<(voxArrSize_-1); i++)
+		std::cout << voxArr_[i] << ", ";
+		
+	std::cout << voxArr_[voxArrSize_-1] << "]" << std::endl;
+	std::cout << "Transition Model: " << std::endl;
+	for (int i=0; i<voxArrSize_; i++)
+	{
+		for (int j=0; j<voxArrSize_; j++)
+			std::cout << transModel_[i][j] << "\t";
+		std::cout << std::endl;
+	}
+
+	for (int i=0; i<voxArrSize_; i++)
+	{
+		std::cout << "Number of Voxel Points: " << ptsVox_[i] << std::endl;
+		std::cout << "Distance from Origin: " << distVox_[i] << std::endl;
+		std::cout << "Distance of Nearest Voxel: " << distVoxPiv_ << std::endl;
+		std::cout << "Distance from Nearest Voxel: " << abs(distVox_[i] - distVoxPiv_) << std::endl;
+		std::cout << "Observation Weight: " << obsWeight_[i] << std::endl;
+		std::cout << "Number of Particles: " << beliefArr_[i] << std::endl << std::endl;
+		std::cout << "Probability of Voxel: " << float(beliefArr_[i])/float(partArrSize_) << std::endl; 
+	}
+	std::cout << std::endl;
+};
+
+// *******************************************************************
