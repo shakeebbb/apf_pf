@@ -36,7 +36,6 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	obsWeight_ = new float[voxArrSize_];
 			
 	distVoxPiv_ = 0;
-	nOutliers_ = 50; // per voxel
 	
 	std::cout << "," << std::endl;
 	beliefArr_ = new int[voxArrSize_];
@@ -69,6 +68,7 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/min_distance", minDist_));
 	while(!nh->getParam("filter_point_node/max_distance", maxDist_));
 	while(!nh->getParam("filter_point_node/n_particles", partArrSize_));
+	while(!nh->getParam("filter_point_node/outliers_per_voxel", nOutliers_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
@@ -185,23 +185,23 @@ void filter_point_class::update_belief()
 	}
 	
 	std::discrete_distribution<int> particleDist(associatedWeight, associatedWeight+partArrSize_);
-			
-	int maxIndex = 0;
-	int maxPart = 0;
+	
+	domVoxIndx_ = 0;
+	int domVoxParts = 0;
 			
 	for (int i=0; i<partArrSize_; i++)
 	{
 		int sampledIndex = particleDist(generator);
 		beliefArr_[associatedVoxel[sampledIndex]]++;
 				
-		if (beliefArr_[associatedVoxel[sampledIndex]] > maxPart)
+		if (beliefArr_[associatedVoxel[sampledIndex]] > domVoxParts)
 		{
-			maxPart = beliefArr_[associatedVoxel[sampledIndex]];
-			maxIndex = associatedVoxel[sampledIndex];
+			domVoxParts = beliefArr_[associatedVoxel[sampledIndex]];
+			domVoxIndx_ = associatedVoxel[sampledIndex];
 		}
 	}
 	
-	domPt_ = voxArr_[maxIndex];	
+	domPt_ = voxArr_[domVoxIndx_];	
 }
 
 // ***************************************************************************
@@ -253,6 +253,7 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
   for (int i=0; i<(voxArrSize_-1); i++)
   {
   	float nearnessWeight = 1 - abs(distVox_[i] - distVoxPiv_) / (maxDist_ - minDist_);
+  	//float nearnessWeight = 1 / (abs(distVox_[i] - distVoxPiv_) + 1);
   	obsWeight_[i] = nearnessWeight * ptsVox_[i];
   }
   obsWeight_[voxArrSize_-1] = nOutliers_;
@@ -314,12 +315,12 @@ void filter_point_class::publish_voxels()
 		pt.z = voxArr_[i].z;
 		markerMsg.points.push_back(pt);
 		
-		//float shade = float(beliefArr_[i])/float(partArrSize_);
+		float shade = float(beliefArr_[i])/float(beliefArr_[domVoxIndx_]);
 		
 		std_msgs::ColorRGBA color;
-		color.r = 0; 
+		color.r = shade; 
 		color.g = 0; 
-		color.b = 1; 
+		color.b = 1 - color.r; 
 		color.a = 1;
 		markerMsg.colors.push_back(color);
 	}

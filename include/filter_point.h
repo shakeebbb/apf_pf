@@ -61,6 +61,7 @@ private:
 	int partArrSize_;
 		
 	pcl::PointXYZ domPt_;
+	int domVoxIndx_;
 		
 	// Filter Status
 	bool isInitialized_;
