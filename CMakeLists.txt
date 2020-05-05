@@ -139,6 +139,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
  add_executable(filter_point_node src/filter_point_node.cpp)
+ add_executable(noise_cloud_node src/noise_cloud_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -153,6 +154,7 @@ include_directories(
 ## Specify libraries to link a library or executable target against
  target_link_libraries(filter_point ${catkin_LIBRARIES})
  target_link_libraries(filter_point_node ${catkin_LIBRARIES} filter_point)
+ target_link_libraries(noise_cloud_node ${catkin_LIBRARIES})
 
 #############
 ## Install ##

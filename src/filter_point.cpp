@@ -16,6 +16,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	std::cout << "," << std::endl;
 	ptVizPub_ = nh->advertise<visualization_msgs::Marker>("filter_point_node/pt_cloud_viz", 100);
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_out", 100);
+	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_piv_out", 100);
 	
 	std::cout << "," << std::endl;
 	distArrSize_ = ceil((maxDist_ - minDist_)/discInt_ + 1);
@@ -228,6 +229,7 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
 	std::fill(ptsVox_, ptsVox_ + voxArrSize_, 0);
 	std::fill(distVox_, distVox_ + voxArrSize_, 0);
 	distVoxPiv_ = maxDist_;
+	ptPiv_ = pcl::PointXYZ(0,0,0);
   			
   int indexVox;
   float distVox;
@@ -247,14 +249,20 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
   	distVox_[indexVox] = distVox;
   				
   	if(distVox_[indexVox] < distVoxPiv_)
-  	distVoxPiv_ = distVox_[indexVox];
+  	{
+  		distVoxPiv_ = distVox_[indexVox];
+  		ptPiv_ = ptCloudPtr->points[i];
+  	}
   }
   		
   for (int i=0; i<(voxArrSize_-1); i++)
   {
-  	float nearnessWeight = 1 - abs(distVox_[i] - distVoxPiv_) / (maxDist_ - minDist_);
-  	//float nearnessWeight = 1 / (abs(distVox_[i] - distVoxPiv_) + 1);
+  	//float nearnessWeight = 1 - abs(distVox_[i] - distVoxPiv_) / (maxDist_ - minDist_);
+  	float nearnessWeight = 1 / (abs(distVox_[i] - distVoxPiv_) + 1);
   	obsWeight_[i] = nearnessWeight * ptsVox_[i];
+  	
+  	//if (ptsVox_[i] > 0)
+  	//std::cout << ptsVox_[i] << std::endl;
   }
   obsWeight_[voxArrSize_-1] = nOutliers_;
 }
@@ -266,7 +274,8 @@ bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, i
 			
 	if((distVox > maxDist_) || (distVox < minDist_))
 	return false;
-			
+	
+	//std::cout << "Detected valid points at distance: " << distVox << std::endl;
 	int indexVoxX = floor(float(indexPt % imgWidth_) / float(discPix_));
 	int indexVoxY = floor(floor(float(indexPt)/float(imgWidth_)) / float(discPix_));
 	int indexVoxZ = floor((distVox - minDist_) /  discInt_);
@@ -334,7 +343,16 @@ void filter_point_class::publish_voxels()
 	ptMsg.point.y = domPt_.y;
 	ptMsg.point.z = domPt_.z;
 
-	ptPub_.publish(ptMsg);		
+	ptPub_.publish(ptMsg);
+	
+	geometry_msgs::PointStamped ptPivMsg;
+	ptPivMsg.header.stamp = ros::Time::now();
+	ptPivMsg.header.frame_id = frameId_;
+	ptPivMsg.point.x = ptPiv_.x;
+	ptPivMsg.point.y = ptPiv_.y;
+	ptPivMsg.point.z = ptPiv_.z;
+
+	ptPivPub_.publish(ptPivMsg);
 }
 		
 // ***************************************************************************

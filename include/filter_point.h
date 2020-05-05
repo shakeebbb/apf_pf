@@ -8,7 +8,6 @@
 #include "pcl/PCLPointCloud2.h"
 #include "pcl/point_cloud.h"
 #include "pcl_conversions/pcl_conversions.h"
-#include "pcl/kdtree/kdtree_flann.h"
 #include "pcl/common/distances.h"
 #include "pcl/point_representation.h"
 #include "pcl_ros/point_cloud.h"
@@ -24,6 +23,7 @@ private:
 	ros::Subscriber ptCloudSub_;
 	ros::Publisher ptVizPub_;
 	ros::Publisher ptPub_;
+	ros::Publisher ptPivPub_;
 	std::string frameId_;
 		
 	// States, Discretizations
@@ -53,6 +53,7 @@ private:
 	int* ptsVox_;
 	float* distVox_;
 	float distVoxPiv_;
+	pcl::PointXYZ ptPiv_;
 		
 	int nOutliers_;
 	float* obsWeight_;
