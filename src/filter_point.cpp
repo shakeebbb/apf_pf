@@ -19,7 +19,6 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	ROS_INFO("Received input cloud and camera info");
 	
-	std::cout << "," << std::endl;
 	ptVizPub_ = nh->advertise<visualization_msgs::Marker>("filter_point_node/pt_cloud_viz", 100);
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_out", 100);
 	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_piv_out", 100);
@@ -31,7 +30,6 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	voxGridHeight_ = ceil(float(imgHeight_)/float(pixInt_));
 	voxGridDepth_ = ceil( (maxDist_ - minDist_)/distInt_ + 1 );
 	
-	std::cout << "," << std::endl;
 	voxArrSize_ = voxGridWidth_*voxGridHeight_*voxGridDepth_ + 1;
 	voxArr_ = new pcl::PointXYZ[voxArrSize_];
 	
@@ -43,29 +41,29 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 				voxArr_[count] = pcl::PointXYZ(k*pixInt_, j*pixInt_, minDist_ + i*distInt_);
 				count ++;
 			}
+			
+	voxArr_[voxArrSize_-1] = pcl::PointXYZ(0, 0, 0);
 	
 	// Voxel observations
 	ptsVox_ = new int[voxArrSize_];
 	
-	std::cout << "," << std::endl;
+	ROS_INFO("Setup voxel array");
 	
 	// Voxel belief
 	int voxBelief[voxArrSize_];
-	std::fill(voxBelief, voxBelief + voxArrSize_, velPartArrSize_/voxArrSize_);
+	std::fill(voxBelief, voxBelief + voxArrSize_, 1);
+	
 	voxBeliefDistr_ = std::discrete_distribution<int>(voxBelief, voxBelief + voxArrSize_);
 	
-	int velBelief[velArrSize_];
-	std::fill(velBelief, velBelief + velArrSize_, velPartArrSize_/voxArrSize_);
-	velBeliefDistr_ = std::discrete_distribution<int>(velBelief, velBelief + velArrSize_);
-	
-	std::cout << "," << std::endl;
+	//for (int i=0; i<voxArrSize_; i++)
+	//{
+	//	std::cout << voxBelief[i] << ", " << voxBeliefDistr_.probabilities()[i] <<  std::endl;
+	//}
 	
 	// Action array
 	actArrSize_ = ceil((maxAct_[0] - minAct_[0])/actInt_[0] + 1) * 
 								ceil((maxAct_[1] - minAct_[1])/actInt_[1] + 1) * 
 								ceil((maxAct_[2] - minAct_[2])/actInt_[2] + 1) + 1;
-	
-	std::cout << "actArrSize_ = " << actArrSize_ << std::endl;
 	
 	actArr_ = new float*[actArrSize_];
 	count = 0;
@@ -80,45 +78,17 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 				actArr_[count][1] = j;
 				actArr_[count][2] = k;
 				count++;
-				std::cout << i << ", " << j << ", " << k << std::endl;
+				//std::cout << i << ", " << j << ", " << k << std::endl;
 			}
 		}
-		getchar();
 	}
-	
-	std::cout << "k" << std::endl;
 	
 	actArr_[actArrSize_-1] = new float[3];
 	actArr_[actArrSize_-1][0] = 0;
 	actArr_[actArrSize_-1][1] = 0;
 	actArr_[actArrSize_-1][2] = 0;
 	
-	std::cout << "," << std::endl;
-	
-	// Velocity array
-	velArrSize_ = ceil((maxVel_[0] - minVel_[0])/velInt_[0] + 1) * 
-								ceil((maxVel_[1] - minVel_[1])/velInt_[1] + 1) * 
-								ceil((maxVel_[2] - minVel_[2])/velInt_[2] + 1) + 1;
-	velArr_ = new float*[velArrSize_];
-	count = 0;
-	for (float i=minVel_[0]; i<=maxVel_[0]; i+=velInt_[0])
-		for (float j=minVel_[1]; j<=maxVel_[1]; j+=velInt_[1])
-			for (float k=minVel_[2]; k<=maxVel_[2]; k+=velInt_[2])
-			{
-				velArr_[count] = new float[3];
-				velArr_[count][0] = i;
-				velArr_[count][1] = j;
-				velArr_[count][2] = k;
-				count++;
-			}
-	
-	velArr_[velArrSize_-1] = new float[3];
-	
-	velArr_[velArrSize_-1][0] = 0;
-	velArr_[velArrSize_-1][1] = 0;
-	velArr_[velArrSize_-1][2] = 0;
-	
-	std::cout << "," << std::endl;
+	ROS_INFO("Setup action array");
 	
 	// Static transforms
 	while(!tfBuffer_.canTransform (baseFrameId_, camFrameId_, ros::Time(0)))
@@ -126,28 +96,22 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	camToBaseTransform_ = tfBuffer_.lookupTransform (baseFrameId_, camFrameId_, ros::Time(0));
 	
+	ROS_INFO("Cam to base transform received");
+	
 	// Function calls	 
 	populate_transition_model();
+	//display(3);
+	getchar();
 }
 
 // ***************************************************************************
 filter_point_class::~filter_point_class()
 {
-	for (int i=0; i<actArrSize_; i++)
-	delete voxTransModel_[i];
 	delete voxTransModel_;
-	
-	for (int i=0; i<actArrSize_; i++)
-	delete velTransModel_[i];
-	delete velTransModel_;
 	
 	for (int i=0; i<actArrSize_; i++)
 	delete actArr_[i];
 	delete actArr_;
-	
-	for (int i=0; i<velArrSize_; i++)
-	delete velArr_[i];
-	delete velArr_;
 	
 	delete voxArr_;		
 	delete ptsVox_;
@@ -162,7 +126,6 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/max_distance", maxDist_));
 	
 	while(!nh->getParam("filter_point_node/n_particles_vox", voxPartArrSize_));
-	while(!nh->getParam("filter_point_node/n_particles_vel", velPartArrSize_));
 	while(!nh->getParam("filter_point_node/outliers_per_voxel", nOutliers_));
 	
 	while(!nh->getParam("filter_point_node/trans_noise_sdev", sdevTrans_));
@@ -172,11 +135,7 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/max_action_values", maxAct_));
 	while(!nh->getParam("filter_point_node/action_intervals", actInt_));
 	
-	while(!nh->getParam("filter_point_node/min_velocity_values", minVel_));
-	while(!nh->getParam("filter_point_node/max_velocity_values", maxVel_));
-	while(!nh->getParam("filter_point_node/velocity_intervals", velInt_));
-	
-	while(!nh->getParam("filter_point_node/sampling_time", deltaT_));
+	while(!nh->getParam("filter_point_node/lookahead_time", lookaheadT_));
 	while(!nh->getParam("filter_point_node/base_frame_id", baseFrameId_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
@@ -196,9 +155,9 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 	if((isInitialized_ & 0x03) == 0x03)
 	{
 		extract_features(msgPtr);
-		update_belief(actArrSize_-1);
+		update_belief();
 		publish_voxels();
-		//display(3);
+		display(3, "belief");
 	}
 	
 	if((isInitialized_ & 0x01) != 0x01)
@@ -225,13 +184,13 @@ void filter_point_class::cam_info_cb(const sensor_msgs::CameraInfo::ConstPtr& ms
 {
 	if( (isInitialized_ & 0x02) != 0x02 )
 	{
-		std::cout << "Matrix P ";
+		//std::cout << "Matrix P ";
 		
 		for(int i=0; i<9; i++)
 		{
 			camInfoP_[i] = msgPtr->P[i];
 			
-			std::cout << camInfoP_[i] << ", ";
+			//std::cout << camInfoP_[i] << ", ";
 		}
 		
 		std::cout << std::endl;
@@ -239,7 +198,7 @@ void filter_point_class::cam_info_cb(const sensor_msgs::CameraInfo::ConstPtr& ms
 		isInitialized_ |= 0x02;
 	}
 	
-	std::cout << "cam_info" << std::endl;
+	//std::cout << "cam_info" << std::endl;
 }
 
 // ***************************************************************************
@@ -283,7 +242,7 @@ void filter_point_class::twist_cb(const geometry_msgs::TwistStamped::ConstPtr& m
 }
 
 // ***************************************************************************
-int filter_point_class::apply_action(int indxVoxIn, int indxAct)
+int filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT)
 {
 	if(indxVoxIn == (voxArrSize_ - 1))
 	return voxArrSize_;
@@ -300,8 +259,8 @@ int filter_point_class::apply_action(int indxVoxIn, int indxAct)
 																			  camToBaseTransform_.transform.translation.y,
 																			  camToBaseTransform_.transform.translation.z) ); 
 	
-	tf2::Transform baseP2base( tf2::Quaternion(actArr_[indxAct][2]*deltaT_, 0, 0), 
-														 tf2::Vector3(actArr_[indxAct][0]*deltaT_, 0, actArr_[indxAct][1]*deltaT_) );
+	tf2::Transform baseP2base( tf2::Quaternion(actArr_[indxAct][2]*deltaT, 0, 0), 
+														 tf2::Vector3(actArr_[indxAct][0]*deltaT, 0, actArr_[indxAct][1]*deltaT) );
 	
 	tf2::Vector3 point3Tf = cam2base.inverse() * baseP2base.inverse() * cam2base * tf2::Vector3(point3.x, point3.y, point3.z);
 	
@@ -379,21 +338,21 @@ float filter_point_class::man_dist_vox(int indxVox1, int indxVox2)
 	
 	return abs( (voxArr_[indxVox2].x - voxArr_[indxVox1].x) / pixInt_ ) + 
 				 abs( (voxArr_[indxVox2].y - voxArr_[indxVox1].y) /pixInt_ ) + 
-				 abs( (voxArr_[indxVox2].z - voxArr_[indxVox1].z) /pixInt_ );
+				 abs( (voxArr_[indxVox2].z - voxArr_[indxVox1].z) /distInt_ );
 }
 
 // ***************************************************************************
-float filter_point_class::man_dist_to_bound(int indxVox1)
+float filter_point_class::man_dist_to_bound(int indxVox)
 {	
 	float dist[5];
 	
 	// right, left, front, upper, lower
 	
-	dist[0] = abs( voxArr_[indxVox1].x / pixInt_ - voxGridWidth_ ); 
-	dist[1] = abs( voxArr_[indxVox1].x / pixInt_ + 1 );
-	dist[2] = abs( (voxArr_[indxVox1].z - minDist_) / distInt_ - voxGridDepth_ );
-	dist[3] = abs( voxArr_[indxVox1].y / pixInt_ + 1 );
-	dist[4] = abs( voxArr_[indxVox1].y / pixInt_ - voxGridHeight_); 
+	dist[0] = abs( voxArr_[indxVox].x / pixInt_ - voxGridWidth_ ); 
+	dist[1] = abs( voxArr_[indxVox].x / pixInt_ + 1 );
+	dist[2] = abs( (voxArr_[indxVox].z - minDist_) / distInt_ - voxGridDepth_ );
+	dist[3] = abs( voxArr_[indxVox].y / pixInt_ + 1 );
+	dist[4] = abs( voxArr_[indxVox].y / pixInt_ - voxGridHeight_); 
 	
 	return *std::min_element(dist, dist+5);
 }
@@ -411,68 +370,37 @@ pcl::PointXYZ filter_point_class::indx_to_vox(int indxVox)
 }
 
 // ***************************************************************************
-float filter_point_class::norm_pdf(float mean, float sdev, float xIn, bool isHalf)
+float filter_point_class::norm_pdf(float mean, float sdev, float xIn, bool isFull)
 {
     static const float inv_sqrt_2pi = 0.3989422804014327;
     float a = (xIn - mean) / sdev;
-
-    return inv_sqrt_2pi / sdev * std::exp(-0.5f * a * a);
+    
+    //if( isFull || (xIn == mean) ) 
+    if(isFull)
+		return inv_sqrt_2pi / sdev * std::exp(-0.5f * a * a);
+		else
+		return 2 * inv_sqrt_2pi / sdev * std::exp(-0.5f * a * a);
 }
 
 // ***************************************************************************
 void filter_point_class::populate_transition_model()
 {
-	voxTransModel_ = new std::discrete_distribution<int>*[actArrSize_];
+	voxTransModel_ = new std::discrete_distribution<int>[voxArrSize_];
 	
-	for (int i=0; i<actArrSize_; i++)
+	for (int i=0; i<voxArrSize_; i++)
 	{
-		voxTransModel_[i] = new std::discrete_distribution<int>[voxArrSize_];
-		
+		float transWeights[voxArrSize_];
+			
 		for (int j=0; j<voxArrSize_; j++)
-		{
-			//if(abs(actArr_[i][0]) <= 0.2 && abs(actArr_[i][1]) <= 0.2 && abs(actArr_[i][2]) <= 0.2)
-			//{
-				std::cout << std::endl;
-				std::cout << "Applying action " << actArr_[i][0] << ", " << actArr_[i][1] << ", " << actArr_[i][2] << std::endl;
-				std::cout << "Current voxel " << voxArr_[j].x << ", " << voxArr_[j].y << ", " << voxArr_[j].z << std::endl;  
-			//}
-			int indxVoxP = apply_action(j, i);
-			//if(abs(actArr_[i][0]) <= 0.2 && abs(actArr_[i][1]) <= 0.2 && abs(actArr_[i][2]) <= 0.2)
-			//{
-				std::cout << "Next voxel Id " << indxVoxP << std::endl;
-				std::cout << "Next voxel " << voxArr_[indxVoxP].x << ", " << voxArr_[indxVoxP].y << ", " << voxArr_[indxVoxP].z << std::endl; 
-			//}
-			float transWeights[voxArrSize_];
+		transWeights[j] = norm_pdf( 0, sdevTrans_[0], man_dist_vox(i, j), false) *
+											norm_pdf( 0, sdevTrans_[1], voxArr_[j].z, false);
 			
-			for (int k=0; k<voxArrSize_; k++)
-			transWeights[k] = norm_pdf( 0, sdevTrans_[0], man_dist_vox(indxVoxP, k), false );
-			
-			voxTransModel_[i][j] = std::discrete_distribution<int>(transWeights, transWeights+voxArrSize_);
-		}
-	}
-	
-	velTransModel_ = new std::discrete_distribution<int>*[actArrSize_];
-	
-	for (int i=0; i<actArrSize_; i++)
-	{
-		velTransModel_[i] = new std::discrete_distribution<int>[velArrSize_];
-		
-		float transWeights[velArrSize_];
-		
-		for (int k=0; k<velArrSize_; k++)
-		transWeights[k] = norm_pdf(actArr_[i][0], sdevTrans_[1], velArr_[k][0]) * 
-											norm_pdf(actArr_[i][1], sdevTrans_[1], velArr_[k][1]) * 
-											norm_pdf(actArr_[i][2], sdevTrans_[1], velArr_[k][2]);
-		
-		velTransModel_[i][0] = std::discrete_distribution<int>(transWeights, transWeights+velArrSize_);
-		
-		for (int j=1; j<velArrSize_; j++)
-		velTransModel_[i][j] = velTransModel_[i][0];
+		voxTransModel_[i] = std::discrete_distribution<int>(transWeights, transWeights+voxArrSize_);
 	}
 }
 
 // ***************************************************************************
-void filter_point_class::update_belief(int actIndx) 
+void filter_point_class::update_belief() 
 {
 	//------ Belief can be zero to 1: better solution?
 	// --------voxelDist = discrete_distribution<int>(obsWeight, obsWeight+nVoxels);
@@ -480,27 +408,32 @@ void filter_point_class::update_belief(int actIndx)
 	//generator.seed(seed);
 	
 	float voxObsWeight[voxArrSize_];
-	float velObsWeight[velArrSize_];
+	int maxPts = 0;
+	
+	//voxObsWeight[voxArrSize_-1] = 1;
+	
+	std::cout << "Observation Weight: " << "[";
 	
 	for (int i=0; i<(voxArrSize_-1); i++)
-  {  	
-  	voxObsWeight[i] = norm_pdf(0, sdevObsv_[0], (pixInt_ * pixInt_) - ptsVox_[i], false) * 
-  										 norm_pdf(0, sdevObsv_[1], voxArr_[i].z, false);
+  { 
+  	//std::cout << "Maximum Points: " <<  pixInt_ * pixInt_ << std::endl;
+  	//std::cout << "Voxel Points: " << ptsVox_[i] << std::endl;
+  		
+  	voxObsWeight[i] = norm_pdf(0, sdevObsv_[0], (pixInt_ * pixInt_) - ptsVox_[i], false);
+  	//std::cout << "Voxel Probability: " << voxObsWeight[i] << std::endl;
+  	
+  	if(ptsVox_[i] > maxPts)
+  	maxPts = ptsVox_[i];
+  	
+  	std::cout << voxObsWeight[i] << ", ";
   }
-  voxObsWeight[voxArrSize_-1] = norm_pdf(0, sdevObsv_[0], (pixInt_ * pixInt_) - nOutliers_, false);
+  
+  voxObsWeight[voxArrSize_-1] = norm_pdf(0, sdevObsv_[1], maxPts, false);
+  std::cout << voxObsWeight[voxArrSize_-1] << "]" << std::endl;
+  //std::cout << "Boundary voxel Probability: " << voxObsWeight[voxArrSize_-1] << std::endl;
+  //voxObsWeight[voxArrSize_-1] = norm_pdf(0, sdevObsv_[0], (pixInt_ * pixInt_) - nOutliers_, false);
 	
-	for (int i=0; i<velArrSize_; i++)
-  {
-  	velObsWeight[i] = norm_pdf(robotVel_.twist.linear.x, sdevObsv_[2], actArr_[actIndx][0]) * 
-  										 norm_pdf(robotVel_.twist.linear.y, sdevObsv_[2], actArr_[actIndx][1]) * 
-  										 norm_pdf(robotVel_.twist.linear.z, sdevObsv_[2], actArr_[actIndx][2]);
-  }
-			
-	//std::discrete_distribution<int> voxBeliefDist(voxBeliefArr_, voxBeliefArr_+voxArrSize_);
-	//std::fill(voxBeliefArr_, voxBeliefArr_ + voxArrSize_, 0);
-	
-	voxBeliefDistr_ = particle_filter(voxBeliefDistr_, voxTransModel_[actIndx], voxObsWeight, voxPartArrSize_);	
-	velBeliefDistr_ = particle_filter(velBeliefDistr_, velTransModel_[actIndx], velObsWeight, velPartArrSize_);	
+	voxBeliefDistr_ = particle_filter(voxBeliefDistr_, voxTransModel_, voxObsWeight, voxPartArrSize_);	
 }
 
 // ***************************************************************************
@@ -509,7 +442,7 @@ filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefD
 																		std::discrete_distribution<int>* transModel,
 																		float *obsWeight, int nParts)
 {		
-	int partWeight[nParts];
+	float partWeight[nParts];
 	int partState[nParts];
 	
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -522,17 +455,21 @@ filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefD
 				
 		partState[i] = nextState;
 		partWeight[i] = obsWeight[nextState];
+		
+		//std::cout << partState[i] << ", " << partWeight[i] << std::endl;
 	}
 	
 	std::discrete_distribution<int> partDistr(partWeight, partWeight+nParts);
 
-	int updatedBelief[initBeliefDist.probabilities().size()];
+	int updatedBelief[initBeliefDist.probabilities().size()] = { 0 };
 			
 	for (int i=0; i<nParts; i++)
 	{
 		int sampledPart = partDistr(generator);
 		updatedBelief[partState[sampledPart]]++;
 	}
+	
+	return std::discrete_distribution<int>(updatedBelief, updatedBelief+initBeliefDist.probabilities().size());
 }
 
 // ***************************************************************************
@@ -586,8 +523,10 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
 // ***************************************************************************
 bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, int& indexVox, float& distVox)
 {
-	distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
-			
+	//distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
+	
+	distVox = pt.z;
+	
 	if((distVox > maxDist_) || (distVox < minDist_))
 	return false;
 	
@@ -630,17 +569,32 @@ void filter_point_class::publish_voxels()
 	markerMsg.scale = scale;
 	
 	markerMsg.ns = "filter_point";
+	
+	std::vector<double> probVec;
+	probVec = voxBeliefDistr_.probabilities();
+	
+	std::vector<double>::iterator domItr = std::max_element(probVec.begin(), probVec.end());
+	int domIndx = domItr - probVec.begin();
+	float domProb = *domItr;
+	
 	for (int i=0; i<voxArrSize_; i++)
 	{
 		markerMsg.id = i;
 		
 		geometry_msgs::Point pt;
-		pt.x = voxArr_[i].x; 
-		pt.y = voxArr_[i].y;
-		pt.z = voxArr_[i].z;
+		pcl::PointXYZ pt3 = point2_to_point3(voxArr_[i], true);
+		pt.x = pt3.x;
+		pt.y = pt3.y;
+		pt.z = pt3.z;
 		markerMsg.points.push_back(pt);
 		
-		float shade = 0; // float(voxBeliefArr_[i])/float(voxBeliefArr_[domVoxIndx_]);
+		//float shade = voxBeliefDistr_.probabilities()[i] / domProb; // float(voxBeliefArr_[i])/float(voxBeliefArr_[domVoxIndx_]);
+		
+		float shade;
+		if(voxBeliefDistr_.probabilities()[i] == 0)
+		shade = 0;
+		else
+		shade = 1;
 		
 		std_msgs::ColorRGBA color;
 		color.r = shade; 
@@ -655,9 +609,22 @@ void filter_point_class::publish_voxels()
 	geometry_msgs::PointStamped ptMsg;
 	ptMsg.header.stamp = ros::Time::now();
 	ptMsg.header.frame_id = camFrameId_;
-	//ptMsg.point.x = domPt_.x;
-	//ptMsg.point.y = domPt_.y;
-	//ptMsg.point.z = domPt_.z;
+	
+	//for (int i=0; i<voxArrSize_; i++)
+	//{
+	//	std::cout << voxBeliefDistr_.probabilities()[i] << std::endl;
+	//}
+	
+	//std::cout << "here" << std::endl;
+	
+								
+	//std::cout << "here2" << std::endl;
+	
+	pcl::PointXYZ pt3 = point2_to_point3(voxArr_[domIndx], true);
+
+	ptMsg.point.x = pt3.x;
+	ptMsg.point.y = pt3.y;
+	ptMsg.point.z = pt3.z;
 
 	ptPub_.publish(ptMsg);
 	
@@ -672,35 +639,42 @@ void filter_point_class::publish_voxels()
 }
 		
 // ***************************************************************************
-void filter_point_class::display(int precision)
+void filter_point_class::display(int precision, std::string field)
 {
 	std::cout << std::setprecision(precision) << std::endl;
 	std::cout << "<===============================================>" << std::endl; 
 	std::cout << "Number of possible states: " << voxArrSize_ << std::endl;
-	std::cout << "All possible states: [";
-	for (int i=0; i<(voxArrSize_-1); i++)
-		std::cout << voxArr_[i] << ", ";
-		
-	std::cout << voxArr_[voxArrSize_-1] << "]" << std::endl;
-	std::cout << "Transition Model: " << std::endl;
-	for (int i=0; i<voxArrSize_; i++)
+	
+	if(field == "all")
 	{
-		for (int j=0; j<voxArrSize_; j++)
-			std::cout << voxTransModel_[i][j] << "\t";
-		std::cout << std::endl;
+		std::cout << "All possible states: [";
+		for (int i=0; i<(voxArrSize_-1); i++)
+			std::cout << voxArr_[i] << ", ";
+			
+		std::cout << voxArr_[voxArrSize_-1] << "]" << std::endl;
+		std::cout << "Transition Model: " << std::endl;
+		for (int i=0; i<voxArrSize_; i++)
+		{
+			for (int j=0; j<voxArrSize_; j++)
+				std::cout << voxTransModel_[i].probabilities()[j] << "\t";
+			std::cout << std::endl;
+		}
 	}
 
-	for (int i=0; i<voxArrSize_; i++)
+	std::cout << "Number of Voxel Points: [";
+	for (int i=0; i<(voxArrSize_-1); i++)
+		std::cout << ptsVox_[i] << ", ";
+
+	std::cout << ptsVox_[voxArrSize_-1] << "]" << std::endl;
+	
+	std::cout << "Belief Vector: [";
+	for (int i=0; i<(voxArrSize_-1); i++)
 	{
-		//std::cout << "Number of Voxel Points: " << ptsVox_[i] << std::endl;
-		//std::cout << "Distance from Origin: " << distVox_[i] << std::endl;
-		//std::cout << "Distance of Nearest Voxel: " << distVoxPiv_ << std::endl;
-		//std::cout << "Distance from Nearest Voxel: " << abs(distVox_[i] - distVoxPiv_) << std::endl;
-		//std::cout << "Observation Weight: " << obsWeight_[i] << std::endl;
-		//std::cout << "Number of Particles: " << voxBeliefArr_[i] << std::endl << std::endl;
-		//std::cout << "Probability of Voxel: " << float(voxBeliefArr_[i])/float(partArrSize_) << std::endl; 
+		std::cout << voxBeliefDistr_.probabilities()[i] << ", ";
 	}
-	std::cout << std::endl;
+	std::cout << voxBeliefDistr_.probabilities()[voxArrSize_-1] << "]" << std::endl;
+	
+	std::cout << std::endl << std::endl;
 };
 
 // *******************************************************************
