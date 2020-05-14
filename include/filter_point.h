@@ -32,9 +32,11 @@ private:
 	ros::Subscriber camInfoSub_;
 	ros::Subscriber twistSub_;
 	ros::Subscriber imuSub_;
+	
 	ros::Publisher ptVizPub_;
 	ros::Publisher ptPub_;
 	ros::Publisher ptPivPub_;
+	ros::Publisher actPub_;
 	
 	tf2_ros::Buffer tfBuffer_;
   tf2_ros::TransformListener* tfListenerPtr_;
@@ -77,6 +79,16 @@ private:
 		
 	// Distributions
 	std::discrete_distribution<int> voxBeliefDistr_;
+	
+	// QMDP
+	Eigen::MatrixXd alphaMat_;
+	Eigen::MatrixXd rewMat_;
+	
+	int alphaItr_;
+	
+	std::vector<float> rewQ_;
+	float repPotMaxDist_;
+	float repPotGain_;
 		
 	// Observations, Features
 	int* ptsVox_;
@@ -107,9 +119,9 @@ public:
 	void imu_cb(const sensor_msgs::Imu::ConstPtr&);
 	
 	// *******************************************************************
-	int apply_action(int, int, float);
+	pcl::PointXYZ apply_action(int, int, float);
 	int point2_to_voxel(pcl::PointXYZ);
-	pcl::PointXYZ point2_to_point3(pcl::PointXYZ, bool);
+	pcl::PointXYZ point2_to_point3(pcl::PointXYZ, bool = true);
 	pcl::PointXYZ indx_to_vox(int);
 	float man_dist_vox(int, int);
 	float man_dist_to_bound(int);
@@ -121,8 +133,15 @@ public:
 	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, float&);
 	bool is_valid(const pcl::PointXYZ&);
 	void publish_voxels();
-	void display(int, std::string);
+	void publish_action(int);
+	void display(std::string, int);
 	float norm_pdf(float, float, float, bool = true);
+	void discretize_image();
+	void populate_reward_model();
+	float repulsive_potential(pcl::PointXYZ);
+	void discretize_actions();
+	void compute_alpha_vectors(int);
+	int update_action();
 	std::discrete_distribution<int> particle_filter(std::discrete_distribution<int>&, 
 																		std::discrete_distribution<int>*, float*, int);
 };

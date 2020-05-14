@@ -19,6 +19,10 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
 )
 
+find_package(
+Eigen3 REQUIRED
+)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -124,6 +128,7 @@ catkin_package(
 include_directories(
 	include
 	${catkin_INCLUDE_DIRS}
+	${Eigen3_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library

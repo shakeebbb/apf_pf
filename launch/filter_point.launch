@@ -20,11 +20,17 @@
 		<rosparam param="trans_noise_sdev"> [3, 0.3] </rosparam>
 		<rosparam param="obsv_noise_sdev"> [100, 10] </rosparam> 
 		
-		<rosparam param="min_action_values"> [0, -0.6, -0.6] </rosparam>
-		<rosparam param="max_action_values"> [0.6, 0.6, 0.6] </rosparam>
-		<rosparam param="action_intervals"> [0.1, 0.1, 0.1] </rosparam>
+		<rosparam param="max_action_values"> [0.3, 0.3, 6.28] </rosparam>
+		<rosparam param="min_action_values"> [0, -0.3, -6.28] </rosparam>
+		<rosparam param="action_intervals"> [0.1, 0.1, 1.57] </rosparam>
 		
-		<param name="lookahead_time" type="double" value="0.1"/>
+		<rosparam param="reward_Q"> [10, 5, 0.1] </rosparam>
+		<param name="repulsive_potential_max_distance" type="double" value="1.2"/>
+		<param name="repulsive_potential_gain" type="double" value="0.0"/>
+		
+		<param name="alpha_vector_iterations" type="int" value="5"/>
+		
+		<param name="lookahead_time" type="double" value="3.0"/>
 		<param name="base_frame_id" type="string" value="base_link"/>
 		
 	</node>

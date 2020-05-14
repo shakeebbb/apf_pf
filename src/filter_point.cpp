@@ -13,22 +13,119 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	isInitialized_ = 0x00;
 	
-	ROS_INFO("Initializing filter_point ...");
+	ROS_INFO("Waiting for inpout cloud and camera info ...");
 	while( (isInitialized_ & 0x03) != 0x03 )
 	ros::spinOnce();
-	
-	ROS_INFO("Received input cloud and camera info");
 	
 	ptVizPub_ = nh->advertise<visualization_msgs::Marker>("filter_point_node/pt_cloud_viz", 100);
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_out", 100);
 	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_piv_out", 100);
+	actPub_ = nh->advertise<geometry_msgs::TwistStamped>("filter_point_node/twist_out", 100);
 	
 	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	
-	// Voxel array
+	ROS_INFO("Setting up voxel and observation array ...");
+	discretize_image();
+	ptsVox_ = new int[voxArrSize_];
+	
+	ROS_INFO("Setting up initial belief array ...");
+	int voxBelief[voxArrSize_];
+	std::fill(voxBelief, voxBelief + voxArrSize_, 1);
+	
+	voxBeliefDistr_ = std::discrete_distribution<int>(voxBelief, voxBelief + voxArrSize_);
+	
+	ROS_INFO("Setting up action array");
+	discretize_actions();
+
+	ROS_INFO("Waiting for camera to base transform ...");
+	while(!tfBuffer_.canTransform (baseFrameId_, camFrameId_, ros::Time(0)))
+	ROS_WARN_THROTTLE(1, "Transform unavailable: %s to %s", baseFrameId_.c_str(), camFrameId_.c_str());
+	
+	camToBaseTransform_ = tfBuffer_.lookupTransform (baseFrameId_, camFrameId_, ros::Time(0));
+	
+	ROS_INFO("Populating transition model ..."); 
+	populate_transition_model();
+	
+	//display("actions", 3);
+	
+	ROS_INFO("Populating reward model ...");
+	populate_reward_model();
+	
+	//display(3, "reward");
+	
+	
+	ROS_INFO("Computing alpha vectors ...");
+	compute_alpha_vectors(alphaItr_);
+	
+	//display("belief", 3);
+	getchar();
+}
+
+// ***************************************************************************
+void filter_point_class::compute_alpha_vectors(int iterations)
+{
+	alphaMat_.resize(voxArrSize_, actArrSize_);
+	alphaMat_.setZero();
+
+	Eigen::MatrixXd alphaMatMax(voxArrSize_, actArrSize_);
+	Eigen::MatrixXd transMat(voxArrSize_, voxArrSize_);
+	
+  for (int i = 0; i < voxArrSize_; i++)
+		transMat.row(i) = Eigen::VectorXd::Map(&voxTransModel_[i].probabilities()[0], voxArrSize_);
+		
+	std::cout << voxTransModel_[0].probabilities()[0] << "===>" << transMat(0, 0) << std::endl;
+	std::cout << voxTransModel_[0].probabilities()[4] << "===>" << transMat(0, 4) << std::endl;
+	std::cout << voxTransModel_[100].probabilities()[24] << "===>" << transMat(100, 24) << std::endl;
+	std::cout << voxTransModel_[0].probabilities()[2] << "===>" << transMat(0, 2) << std::endl;
+	std::cout << voxTransModel_[70].probabilities()[90] << "===>" << transMat(70, 90) << std::endl;
+	std::cout << voxTransModel_[43].probabilities()[5] << "===>" << transMat(43, 5) << std::endl;
+	
+	for (int i=0; i<iterations; i++)
+	{
+		for (int j=0; j<actArrSize_; j++)
+			alphaMatMax.col(j) = alphaMat_.rowwise().maxCoeff();
+		alphaMat_ = rewMat_ + 0.95 * transMat * alphaMatMax;
+	}
+}
+
+// ***************************************************************************
+void filter_point_class::populate_reward_model()
+{
+	rewMat_.resize(voxArrSize_, actArrSize_);
+	
+	for (int i=0; i<voxArrSize_; i++)
+		for (int j=0; j<actArrSize_; j++)
+		{
+			if( i == (voxArrSize_-1) )
+			rewMat_(i, j) = - rewQ_[0]*pow(actArr_[j][0], 2) - 
+												rewQ_[1]*pow(actArr_[j][1], 2) - 
+												rewQ_[2]*pow(actArr_[j][2], 2);
+			else
+			rewMat_(i, j) = repulsive_potential(point2_to_point3(voxArr_[i])) -
+											repulsive_potential( apply_action(i, j, lookaheadT_) ) -
+													rewQ_[0]*pow(actArr_[j][0], 2) - 
+													rewQ_[1]*pow(actArr_[j][1], 2) - 
+													rewQ_[2]*pow(actArr_[j][2], 2);
+		}
+}
+
+// ***************************************************************************
+float filter_point_class::repulsive_potential(pcl::PointXYZ x_xobs)
+{
+	float dist = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), x_xobs);
+	
+	if (dist >= repPotMaxDist_)
+	return 0;
+	
+	return 0.5*repPotGain_*pow(1/dist - 1/repPotMaxDist_, 2);
+}
+
+// ***************************************************************************
+void filter_point_class::discretize_image()
+{
 	voxGridWidth_ = ceil(float(imgWidth_)/float(pixInt_));
 	voxGridHeight_ = ceil(float(imgHeight_)/float(pixInt_));
-	voxGridDepth_ = ceil( (maxDist_ - minDist_)/distInt_ + 1 );
+	voxGridDepth_ = floor( (maxDist_ - minDist_)/distInt_ + 1);
 	
 	voxArrSize_ = voxGridWidth_*voxGridHeight_*voxGridDepth_ + 1;
 	voxArr_ = new pcl::PointXYZ[voxArrSize_];
@@ -43,65 +140,61 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 			}
 			
 	voxArr_[voxArrSize_-1] = pcl::PointXYZ(0, 0, 0);
+}
+
+// ***************************************************************************
+void filter_point_class::discretize_actions()
+{
+	int horzVelSize = floor((maxAct_[0] - minAct_[0])/actInt_[0] + 1);
+	int vertVelSize = floor((maxAct_[1] - minAct_[1])/actInt_[1] + 1);
+	int rotVelSize = floor((maxAct_[2] - minAct_[2])/actInt_[2] + 1);
+	bool zeroIsIncluded = false;
 	
-	// Voxel observations
-	ptsVox_ = new int[voxArrSize_];
-	
-	ROS_INFO("Setup voxel array");
-	
-	// Voxel belief
-	int voxBelief[voxArrSize_];
-	std::fill(voxBelief, voxBelief + voxArrSize_, 1);
-	
-	voxBeliefDistr_ = std::discrete_distribution<int>(voxBelief, voxBelief + voxArrSize_);
-	
-	//for (int i=0; i<voxArrSize_; i++)
-	//{
-	//	std::cout << voxBelief[i] << ", " << voxBeliefDistr_.probabilities()[i] <<  std::endl;
-	//}
-	
-	// Action array
-	actArrSize_ = ceil((maxAct_[0] - minAct_[0])/actInt_[0] + 1) * 
-								ceil((maxAct_[1] - minAct_[1])/actInt_[1] + 1) * 
-								ceil((maxAct_[2] - minAct_[2])/actInt_[2] + 1) + 1;
+	actArrSize_ = horzVelSize * vertVelSize * rotVelSize + 1;
+								
+	//std::cout << maxAct_[0] << ", " << maxAct_[1] << ", " << maxAct_[2] << std::endl;
+	//std::cout << minAct_[0] << ", " << minAct_[1] << ", " << minAct_[2] << std::endl;
+	//std::cout << actInt_[0] << ", " << actInt_[1] << ", " << actInt_[2] << std::endl;
+	//std::cout << "nActions: " << actArrSize_ << std::endl;
 	
 	actArr_ = new float*[actArrSize_];
-	count = 0;
-	for (float i=minAct_[0]; i<=maxAct_[0]; i+=actInt_[0])
+	int count = 0;
+	for (int i=0; i<horzVelSize; i++)
 	{
-		for (float j=minAct_[1]; j<=maxAct_[1]; j+=actInt_[1])
+		for (int j=0; j<vertVelSize; j++)
 		{
-			for (float k=minAct_[2]; k<=maxAct_[2]; k+=actInt_[2])
+			for (int k=0; k<rotVelSize; k++)
 			{
+				//std::cout << k << "==>" << k+actInt_[2] <<  "==>" << ((k+actInt_[2]) > 6.28) << std::endl;
+				//getchar();
+				
 				actArr_[count] = new float[3];
-				actArr_[count][0] = i;
-				actArr_[count][1] = j;
-				actArr_[count][2] = k;
+				actArr_[count][0] = minAct_[0] + i*actInt_[0];
+				actArr_[count][1] = minAct_[1] + j*actInt_[1];
+				actArr_[count][2] = minAct_[2] + k*actInt_[2];
+				
+				if (actArr_[count][0] == 0 && actArr_[count][1] == 0 && actArr_[count][2] == 0)
+				zeroIsIncluded = true;
+				
 				count++;
 				//std::cout << i << ", " << j << ", " << k << std::endl;
 			}
 		}
 	}
 	
-	actArr_[actArrSize_-1] = new float[3];
-	actArr_[actArrSize_-1][0] = 0;
-	actArr_[actArrSize_-1][1] = 0;
-	actArr_[actArrSize_-1][2] = 0;
-	
-	ROS_INFO("Setup action array");
-	
-	// Static transforms
-	while(!tfBuffer_.canTransform (baseFrameId_, camFrameId_, ros::Time(0)))
-	ROS_WARN_THROTTLE(1, "Transform unavailable: %s to %s", baseFrameId_.c_str(), camFrameId_.c_str());
-	
-	camToBaseTransform_ = tfBuffer_.lookupTransform (baseFrameId_, camFrameId_, ros::Time(0));
-	
-	ROS_INFO("Cam to base transform received");
-	
-	// Function calls	 
-	populate_transition_model();
-	//display(3);
-	getchar();
+	//std::cout << "zeroIsIncluded: " << zeroIsIncluded << std::endl;
+	if (zeroIsIncluded)
+	{
+		//delete actArr_[actArrSize_-1];
+		actArrSize_ -= 1;
+	}
+	else
+	{
+		actArr_[actArrSize_-1] = new float[3];
+		actArr_[actArrSize_-1][0] = 0;
+		actArr_[actArrSize_-1][1] = 0;
+		actArr_[actArrSize_-1][2] = 0;
+	}
 }
 
 // ***************************************************************************
@@ -135,6 +228,12 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/max_action_values", maxAct_));
 	while(!nh->getParam("filter_point_node/action_intervals", actInt_));
 	
+	while(!nh->getParam("filter_point_node/reward_Q", rewQ_));
+	while(!nh->getParam("filter_point_node/repulsive_potential_max_distance", repPotMaxDist_));
+	while(!nh->getParam("filter_point_node/repulsive_potential_gain", repPotGain_));
+	
+	while(!nh->getParam("filter_point_node/alpha_vector_iterations", alphaItr_));
+	
 	while(!nh->getParam("filter_point_node/lookahead_time", lookaheadT_));
 	while(!nh->getParam("filter_point_node/base_frame_id", baseFrameId_));
 	
@@ -156,8 +255,9 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 	{
 		extract_features(msgPtr);
 		update_belief();
+		publish_action(update_action());
 		publish_voxels();
-		display(3, "belief");
+		//display(3, "belief");
 	}
 	
 	if((isInitialized_ & 0x01) != 0x01)
@@ -242,10 +342,10 @@ void filter_point_class::twist_cb(const geometry_msgs::TwistStamped::ConstPtr& m
 }
 
 // ***************************************************************************
-int filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT)
+pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT)
 {
 	if(indxVoxIn == (voxArrSize_ - 1))
-	return voxArrSize_;
+	return point2_to_point3(voxArr_[indxVoxIn], true);
 	
 	//std::cout << "Projecting 2.5D point " << voxArr_[indxVoxIn] << std::endl;
 	
@@ -264,27 +364,7 @@ int filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT)
 	
 	tf2::Vector3 point3Tf = cam2base.inverse() * baseP2base.inverse() * cam2base * tf2::Vector3(point3.x, point3.y, point3.z);
 	
-	//std::cout << "Tranformed 3D point " << point3Tf.x() << ", " << point3Tf.y() << ", " << point3Tf.z() << std::endl;
-	
-	pcl::PointXYZ point2 = point2_to_point3(pcl::PointXYZ(point3Tf.x(), point3Tf.y(), point3Tf.z()), false);
-	
-	//std::cout << "Projected 2.5D point " << point2 << std::endl;
-	
-	int indxVoxOut;
-	
-	if(point2.x >= voxGridWidth_*pixInt_ || point2.x < 0 ||
-		 point2.y >= voxGridHeight_*pixInt_ || point2.y < 0 ||
-		 point2.z >= maxDist_ || point2.z <= minDist_)
-	indxVoxOut = voxArrSize_;
-	
-	else
-	{
-		//std::cout	<< "Next 2.5D point " << point2 << std::endl;
-		indxVoxOut = point2_to_voxel(point2);
-	}
-
-	//std::cout << "Returning next voxel" << std::endl;
-	return indxVoxOut;
+	return pcl::PointXYZ(point3Tf.x(), point3Tf.y(), point3Tf.z());
 }
 
 // ***************************************************************************
@@ -292,9 +372,9 @@ int filter_point_class::point2_to_voxel(pcl::PointXYZ pointIn)
 {
 	pcl::PointXYZ pointOut;
 	
-	int xIndx = ceil(float(pointIn.x) / float(pixInt_));
-	int yIndx = ceil(float(pointIn.y) / float(pixInt_));
-	int zIndx = ceil((pointIn.z - minDist_) / distInt_);
+	int xIndx = floor(float(pointIn.x) / float(pixInt_));
+	int yIndx = floor(float(pointIn.y) / float(pixInt_));
+	int zIndx = floor((pointIn.z - minDist_) / distInt_);
 	
 	return xIndx + voxGridWidth_*(yIndx + voxGridHeight_*zIndx);
 }
@@ -400,6 +480,22 @@ void filter_point_class::populate_transition_model()
 }
 
 // ***************************************************************************
+int filter_point_class::update_action()
+{
+	Eigen::VectorXd beliefMat;
+	
+	beliefMat = Eigen::VectorXd::Map(&voxBeliefDistr_.probabilities()[0], voxArrSize_);
+	
+	Eigen::VectorXd value = alphaMat_.transpose() * beliefMat;
+	
+	int actIndx;
+	value.maxCoeff(&actIndx);
+	
+	std::cout << value.maxCoeff(&actIndx) << std::endl;
+	return actIndx;
+}
+
+// ***************************************************************************
 void filter_point_class::update_belief() 
 {
 	//------ Belief can be zero to 1: better solution?
@@ -412,7 +508,7 @@ void filter_point_class::update_belief()
 	
 	//voxObsWeight[voxArrSize_-1] = 1;
 	
-	std::cout << "Observation Weight: " << "[";
+	//std::cout << "Observation Weight: " << "[";
 	
 	for (int i=0; i<(voxArrSize_-1); i++)
   { 
@@ -425,11 +521,11 @@ void filter_point_class::update_belief()
   	if(ptsVox_[i] > maxPts)
   	maxPts = ptsVox_[i];
   	
-  	std::cout << voxObsWeight[i] << ", ";
+  	//std::cout << voxObsWeight[i] << ", ";
   }
   
   voxObsWeight[voxArrSize_-1] = norm_pdf(0, sdevObsv_[1], maxPts, false);
-  std::cout << voxObsWeight[voxArrSize_-1] << "]" << std::endl;
+  //std::cout << voxObsWeight[voxArrSize_-1] << "]" << std::endl;
   //std::cout << "Boundary voxel Probability: " << voxObsWeight[voxArrSize_-1] << std::endl;
   //voxObsWeight[voxArrSize_-1] = norm_pdf(0, sdevObsv_[0], (pixInt_ * pixInt_) - nOutliers_, false);
 	
@@ -545,6 +641,25 @@ bool filter_point_class::is_valid(const pcl::PointXYZ& point)
 {
 	return !(isnan(point.x) || isnan(point.y) || isnan(point.z));
 }
+
+// ***************************************************************************
+void filter_point_class::publish_action(int actIndx)
+{
+	geometry_msgs::TwistStamped actMsg;
+	
+	actMsg.header.stamp = ros::Time::now();
+	actMsg.header.frame_id = baseFrameId_;
+	
+	actMsg.twist.linear.x = actArr_[actIndx][0];
+	actMsg.twist.linear.y = 0;
+	actMsg.twist.linear.z = actArr_[actIndx][1];
+	
+	actMsg.twist.angular.x = 0;
+	actMsg.twist.angular.y = actIndx;
+	actMsg.twist.angular.z = actArr_[actIndx][2];
+	
+	actPub_.publish(actMsg);
+}
 		
 // ***************************************************************************
 void filter_point_class::publish_voxels()
@@ -639,13 +754,14 @@ void filter_point_class::publish_voxels()
 }
 		
 // ***************************************************************************
-void filter_point_class::display(int precision, std::string field)
+void filter_point_class::display(std::string field, int precision)
 {
 	std::cout << std::setprecision(precision) << std::endl;
 	std::cout << "<===============================================>" << std::endl; 
 	std::cout << "Number of possible states: " << voxArrSize_ << std::endl;
+	std::cout << "Number of possible actions: " << actArrSize_ << std::endl;
 	
-	if(field == "all")
+	if(field == "all" || field == "states")
 	{
 		std::cout << "All possible states: [";
 		for (int i=0; i<(voxArrSize_-1); i++)
@@ -661,19 +777,47 @@ void filter_point_class::display(int precision, std::string field)
 		}
 	}
 
-	std::cout << "Number of Voxel Points: [";
-	for (int i=0; i<(voxArrSize_-1); i++)
-		std::cout << ptsVox_[i] << ", ";
-
-	std::cout << ptsVox_[voxArrSize_-1] << "]" << std::endl;
-	
-	std::cout << "Belief Vector: [";
-	for (int i=0; i<(voxArrSize_-1); i++)
+	if(field == "all" || field == "observation")
 	{
-		std::cout << voxBeliefDistr_.probabilities()[i] << ", ";
+		std::cout << "Number of Voxel Points: [";
+		for (int i=0; i<(voxArrSize_-1); i++)
+			std::cout << ptsVox_[i] << ", ";
+
+		std::cout << ptsVox_[voxArrSize_-1] << "]" << std::endl;
 	}
-	std::cout << voxBeliefDistr_.probabilities()[voxArrSize_-1] << "]" << std::endl;
 	
+	if(field == "all" || field == "belief")
+	{
+		std::cout << "Belief Vector: [";
+		for (int i=0; i<(voxArrSize_-1); i++)
+			std::cout << voxBeliefDistr_.probabilities()[i] << ", ";
+		std::cout << voxBeliefDistr_.probabilities()[voxArrSize_-1] << "]" << std::endl;
+	}
+	
+	if(field == "all" || field == "reward")
+	{
+		std::cout << "Reward Model: " << std::endl;
+		for (int i=0; i<voxArrSize_; i++)
+			for (int j=0; j<actArrSize_; j++)
+				std::cout << rewMat_(i, j) << "\t";
+			std::cout << std::endl;
+	}
+	
+	if(field == "all" || field == "actions")
+	{
+		std::cout << "Possible actions" << std::endl;
+		for (int i=0; i<actArrSize_; i++)
+			std::cout << i << "==> [" << actArr_[i][0] << ", " << actArr_[i][1] << ", " << actArr_[i][2] << "]" << std::endl;
+	}
+	
+	if(field == "all" || field == "alpha")
+	{
+		std::cout << "Alpha Vectors" << std::endl;
+		for (int i=0; i<voxArrSize_; i++)
+			for (int j=0; j<actArrSize_; j++)
+				std::cout << alphaMat_(i, j) << "\t";
+			std::cout << std::endl;
+	}
 	std::cout << std::endl << std::endl;
 };
 
