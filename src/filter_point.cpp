@@ -100,15 +100,19 @@ void filter_point_class::populate_reward_model()
 		for (int j=0; j<actArrSize_; j++)
 		{
 			if( i == (voxArrSize_-1) )
-			rewMat_(i, j) = - rewQ_[0]*pow(actArr_[j][0], 2) - 
-												rewQ_[1]*pow(actArr_[j][1], 2) - 
-												rewQ_[2]*pow(actArr_[j][2], 2);
+			rewMat_(i, j) = - rewQ_[0]*pow(actArr_[j][0], 2) 
+											-	rewQ_[1]*pow(actArr_[j][1], 2) 
+											-	rewQ_[2]*pow(actArr_[j][2], 2);
 			else
-			rewMat_(i, j) = repulsive_potential(point2_to_point3(voxArr_[i])) -
-											repulsive_potential( apply_action(i, j, lookaheadT_) ) -
-													rewQ_[0]*pow(actArr_[j][0], 2) - 
-													rewQ_[1]*pow(actArr_[j][1], 2) - 
-													rewQ_[2]*pow(actArr_[j][2], 2);
+			{
+				//rewMat_(i, j) = repulsive_potential(point2_to_point3(voxArr_[i])) -
+				rewMat_(i, j) = - rewQ_[0]*pow(actArr_[j][0], 2) 
+												-	rewQ_[1]*pow(actArr_[j][1], 2) 
+												-	rewQ_[2]*pow(actArr_[j][2], 2);
+				
+				for (int k=0; k<(lookaheadT_/deltaT_ + 1); k++)
+				rewMat_(i, j) -= repulsive_potential( apply_action(i, j, k*deltaT_) );						
+			}
 		}
 }
 

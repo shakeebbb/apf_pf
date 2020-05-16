@@ -24,7 +24,7 @@
 		<rosparam param="min_action_values"> [0, -0.2, -6.28] </rosparam>
 		<rosparam param="action_intervals"> [0.1, 0.1, 6.28] </rosparam>
 		
-		<rosparam param="reward_Q"> [0.000, 0.000, 0.000] </rosparam>
+		<rosparam param="reward_Q"> [0.001, 0.001, 0.001] </rosparam>
 		<param name="repulsive_potential_max_distance" type="double" value="1.2"/>
 		<param name="repulsive_potential_gain" type="double" value="10"/>
 		
