@@ -5,32 +5,33 @@
 <group ns="pico">
 	<node name="filter_point_node" pkg="local_planning" type="filter_point_node" output="screen" clear_params="true">
 	
-		<remap from="filter_point_node/pt_cloud_in" to="noise_cloud_node/pt_cloud_out"/>
+		<remap from="filter_point_node/pt_cloud_in" to="/royale_camera_driver/point_cloud"/>
 		<remap from="filter_point_node/cam_info_in" to="/royale_camera_driver/camera_info"/>
 		<remap from="filter_point_node/pt_cloud_viz" to="filter_point_node/pt_cloud_viz"/>
 		<remap from="filter_point_node/pt_out" to="filter_point_node/pt_out"/>
 		
-		<param name="distance_interval" type="double" value="0.15"/>
+		<param name="distance_interval" type="double" value="0.05"/>
 		<param name="pixel_interval" type="int" value="20"/>
-		<param name="min_distance" type="double" value="0.05"/>
+		<param name="min_distance" type="double" value="0.15"/>
 		<param name="max_distance" type="double" value="1.2"/>
 		<param name="n_particles_vox" type="int" value="50000"/>
 		<param name="outliers_per_voxel" type="int" value="20"/>
 		
-		<rosparam param="trans_noise_sdev"> [3, 0.3] </rosparam>
-		<rosparam param="obsv_noise_sdev"> [100, 10] </rosparam> 
+		<rosparam param="trans_noise_sdev"> [3, 0.3] </rosparam> <!-- voxels, distance -->
+		<rosparam param="obsv_noise_sdev"> [100, 10] </rosparam> <!-- confidence points, nOutliers -->
 		
-		<rosparam param="max_action_values"> [0.3, 0.3, 6.28] </rosparam>
-		<rosparam param="min_action_values"> [0, -0.3, -6.28] </rosparam>
-		<rosparam param="action_intervals"> [0.1, 0.1, 1.57] </rosparam>
+		<rosparam param="max_action_values"> [0.4, 0.2, 6.28] </rosparam>
+		<rosparam param="min_action_values"> [0, -0.2, -6.28] </rosparam>
+		<rosparam param="action_intervals"> [0.1, 0.1, 6.28] </rosparam>
 		
-		<rosparam param="reward_Q"> [10, 5, 0.1] </rosparam>
+		<rosparam param="reward_Q"> [0.000, 0.000, 0.000] </rosparam>
 		<param name="repulsive_potential_max_distance" type="double" value="1.2"/>
-		<param name="repulsive_potential_gain" type="double" value="0.0"/>
+		<param name="repulsive_potential_gain" type="double" value="10"/>
 		
-		<param name="alpha_vector_iterations" type="int" value="5"/>
+		<param name="alpha_vector_iterations" type="int" value="10"/>
 		
-		<param name="lookahead_time" type="double" value="3.0"/>
+		<param name="lookahead_time" type="double" value="1"/>
+		<param name="sampling_time" type="double" value="0.05"/>
 		<param name="base_frame_id" type="string" value="base_link"/>
 		
 	</node>

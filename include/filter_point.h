@@ -105,6 +105,7 @@ private:
 	uint8_t isInitialized_;
 	
 	float lookaheadT_;
+	float deltaT_;
 		
 public:
 	

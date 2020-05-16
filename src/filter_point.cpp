@@ -46,17 +46,20 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	ROS_INFO("Populating transition model ..."); 
 	populate_transition_model();
 	
+	//display("states", 3);
+	//display("observations", 3);
 	//display("actions", 3);
 	
 	ROS_INFO("Populating reward model ...");
 	populate_reward_model();
 	
-	//display(3, "reward");
+	//display("rewards", 3);
 	
 	
 	ROS_INFO("Computing alpha vectors ...");
 	compute_alpha_vectors(alphaItr_);
 	
+	//display("alphas", 3);
 	//display("belief", 3);
 	getchar();
 }
@@ -73,12 +76,12 @@ void filter_point_class::compute_alpha_vectors(int iterations)
   for (int i = 0; i < voxArrSize_; i++)
 		transMat.row(i) = Eigen::VectorXd::Map(&voxTransModel_[i].probabilities()[0], voxArrSize_);
 		
-	std::cout << voxTransModel_[0].probabilities()[0] << "===>" << transMat(0, 0) << std::endl;
-	std::cout << voxTransModel_[0].probabilities()[4] << "===>" << transMat(0, 4) << std::endl;
-	std::cout << voxTransModel_[100].probabilities()[24] << "===>" << transMat(100, 24) << std::endl;
-	std::cout << voxTransModel_[0].probabilities()[2] << "===>" << transMat(0, 2) << std::endl;
-	std::cout << voxTransModel_[70].probabilities()[90] << "===>" << transMat(70, 90) << std::endl;
-	std::cout << voxTransModel_[43].probabilities()[5] << "===>" << transMat(43, 5) << std::endl;
+	//std::cout << voxTransModel_[0].probabilities()[0] << "===>" << transMat(0, 0) << std::endl;
+	//std::cout << voxTransModel_[0].probabilities()[4] << "===>" << transMat(0, 4) << std::endl;
+	//std::cout << voxTransModel_[100].probabilities()[24] << "===>" << transMat(100, 24) << std::endl;
+	//std::cout << voxTransModel_[0].probabilities()[2] << "===>" << transMat(0, 2) << std::endl;
+	//std::cout << voxTransModel_[70].probabilities()[90] << "===>" << transMat(70, 90) << std::endl;
+	//std::cout << voxTransModel_[43].probabilities()[5] << "===>" << transMat(43, 5) << std::endl;
 	
 	for (int i=0; i<iterations; i++)
 	{
@@ -235,6 +238,7 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/alpha_vector_iterations", alphaItr_));
 	
 	while(!nh->getParam("filter_point_node/lookahead_time", lookaheadT_));
+	while(!nh->getParam("filter_point_node/sampling_time", deltaT_));
 	while(!nh->getParam("filter_point_node/base_frame_id", baseFrameId_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
@@ -257,7 +261,7 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 		update_belief();
 		publish_action(update_action());
 		publish_voxels();
-		//display(3, "belief");
+		display("beliefs", 3);
 	}
 	
 	if((isInitialized_ & 0x01) != 0x01)
@@ -347,11 +351,11 @@ pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float
 	if(indxVoxIn == (voxArrSize_ - 1))
 	return point2_to_point3(voxArr_[indxVoxIn], true);
 	
-	//std::cout << "Projecting 2.5D point " << voxArr_[indxVoxIn] << std::endl;
+	//std::cout << "2.5D point (cam frame) " << voxArr_[indxVoxIn] << std::endl;
 	
 	pcl::PointXYZ point3 = point2_to_point3(voxArr_[indxVoxIn], true);
 	
-	//std::cout << "Projected 3D point " << point3 << std::endl;
+	//std::cout << "3D point (cam frame)" << point3 << std::endl;
 
 	tf2::Transform cam2base( tf2::Quaternion(camToBaseTransform_.transform.rotation.x, camToBaseTransform_.transform.rotation.y,
 														  						 camToBaseTransform_.transform.rotation.z, camToBaseTransform_.transform.rotation.w), 
@@ -359,9 +363,43 @@ pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float
 																			  camToBaseTransform_.transform.translation.y,
 																			  camToBaseTransform_.transform.translation.z) ); 
 	
-	tf2::Transform baseP2base( tf2::Quaternion(actArr_[indxAct][2]*deltaT, 0, 0), 
-														 tf2::Vector3(actArr_[indxAct][0]*deltaT, 0, actArr_[indxAct][1]*deltaT) );
+	tf2::Quaternion basePRot;
+	tf2::Vector3 basePTrans;
 	
+	basePRot.setRPY(0, 0, actArr_[indxAct][2]*deltaT);
+	
+	if (actArr_[indxAct][2] == 0)
+	{
+		basePTrans.setX( actArr_[indxAct][0] * deltaT );
+		basePTrans.setY( 0 );
+		basePTrans.setZ( actArr_[indxAct][1] * deltaT );		
+	}
+	else
+	{
+		basePTrans.setX( (actArr_[indxAct][0]/actArr_[indxAct][2]) * sin(actArr_[indxAct][2]*deltaT) );
+		basePTrans.setY( (actArr_[indxAct][0]/actArr_[indxAct][2]) * (1 - cos(actArr_[indxAct][2]*deltaT)) );
+		basePTrans.setZ( actArr_[indxAct][1] * deltaT );
+	}
+	
+	tf2::Transform baseP2base( basePRot, basePTrans );
+	
+	/*
+	tf2::Vector3 pt3Base = cam2base * tf2::Vector3(point3.x, point3.y, point3.z);
+	tf2::Vector3 pt3BaseP = baseP2base.inverse() * pt3Base;
+	tf2::Vector3 pt3CamP = cam2base.inverse() * pt3BaseP;
+	
+	std::cout << "3D point (base frame) " << pt3Base.x() << ", " << pt3Base.y() << ", " << pt3Base.z() << std::endl;
+	std::cout << "Action (base frame) " << actArr_[indxAct][0] << ", " <<actArr_[indxAct][1] << ", " << actArr_[indxAct][2] << std::endl;
+	std::cout << "3D point (new base frame) " << pt3BaseP.x() << ", " << pt3BaseP.y() << ", " << pt3BaseP.z() << std::endl;
+	
+	std::cout << "New base frame origin " << baseP2base.getOrigin().x() << ", " << baseP2base.getOrigin().y() << ", " << baseP2base.getOrigin().z() << std::endl;
+	
+	std::cout << "New base frame orientation " << 0 << ", " << 0 << ", " << actArr_[indxAct][2]*deltaT << std::endl;
+	
+	std::cout << "3D point (new camera frame) " << pt3CamP.x() << ", " << pt3CamP.y() << ", " << pt3CamP.z() << std::endl;
+	
+	std::cout << std::endl << std::endl;
+	*/
 	tf2::Vector3 point3Tf = cam2base.inverse() * baseP2base.inverse() * cam2base * tf2::Vector3(point3.x, point3.y, point3.z);
 	
 	return pcl::PointXYZ(point3Tf.x(), point3Tf.y(), point3Tf.z());
@@ -773,11 +811,11 @@ void filter_point_class::display(std::string field, int precision)
 		{
 			for (int j=0; j<voxArrSize_; j++)
 				std::cout << voxTransModel_[i].probabilities()[j] << "\t";
-			std::cout << std::endl;
+			std::cout << std::endl << std::endl;
 		}
 	}
 
-	if(field == "all" || field == "observation")
+	if(field == "all" || field == "observations")
 	{
 		std::cout << "Number of Voxel Points: [";
 		for (int i=0; i<(voxArrSize_-1); i++)
@@ -786,7 +824,7 @@ void filter_point_class::display(std::string field, int precision)
 		std::cout << ptsVox_[voxArrSize_-1] << "]" << std::endl;
 	}
 	
-	if(field == "all" || field == "belief")
+	if(field == "all" || field == "beliefs")
 	{
 		std::cout << "Belief Vector: [";
 		for (int i=0; i<(voxArrSize_-1); i++)
@@ -794,13 +832,17 @@ void filter_point_class::display(std::string field, int precision)
 		std::cout << voxBeliefDistr_.probabilities()[voxArrSize_-1] << "]" << std::endl;
 	}
 	
-	if(field == "all" || field == "reward")
+	if(field == "all" || field == "rewards")
 	{
 		std::cout << "Reward Model: " << std::endl;
 		for (int i=0; i<voxArrSize_; i++)
+		{
+			std::cout << point2_to_point3(voxArr_[i]) << "==>" << apply_action(i, 0, lookaheadT_) << std::endl;
+			
 			for (int j=0; j<actArrSize_; j++)
 				std::cout << rewMat_(i, j) << "\t";
-			std::cout << std::endl;
+			std::cout << std::endl << std::endl;
+		}
 	}
 	
 	if(field == "all" || field == "actions")
@@ -810,13 +852,15 @@ void filter_point_class::display(std::string field, int precision)
 			std::cout << i << "==> [" << actArr_[i][0] << ", " << actArr_[i][1] << ", " << actArr_[i][2] << "]" << std::endl;
 	}
 	
-	if(field == "all" || field == "alpha")
+	if(field == "all" || field == "alphas")
 	{
 		std::cout << "Alpha Vectors" << std::endl;
 		for (int i=0; i<voxArrSize_; i++)
+		{
 			for (int j=0; j<actArrSize_; j++)
 				std::cout << alphaMat_(i, j) << "\t";
-			std::cout << std::endl;
+			std::cout << std::endl << std::endl;
+		}
 	}
 	std::cout << std::endl << std::endl;
 };
