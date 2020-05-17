@@ -120,7 +120,7 @@ public:
 	void imu_cb(const sensor_msgs::Imu::ConstPtr&);
 	
 	// *******************************************************************
-	pcl::PointXYZ apply_action(int, int, float);
+	pcl::PointXYZ apply_action(int, int, float, bool = true);
 	int point2_to_voxel(pcl::PointXYZ);
 	pcl::PointXYZ point2_to_point3(pcl::PointXYZ, bool = true);
 	pcl::PointXYZ indx_to_vox(int);
@@ -134,7 +134,7 @@ public:
 	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, float&);
 	bool is_valid(const pcl::PointXYZ&);
 	void publish_voxels();
-	void publish_action(int);
+	void publish_action(int, bool = true);
 	void display(std::string, int);
 	float norm_pdf(float, float, float, bool = true);
 	void discretize_image();

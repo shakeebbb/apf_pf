@@ -13,7 +13,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	isInitialized_ = 0x00;
 	
-	ROS_INFO("Waiting for inpout cloud and camera info ...");
+	ROS_INFO("Waiting for input cloud and camera info ...");
 	while( (isInitialized_ & 0x03) != 0x03 )
 	ros::spinOnce();
 	
@@ -61,7 +61,8 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	//display("alphas", 3);
 	//display("belief", 3);
-	getchar();
+	
+	//getchar();
 }
 
 // ***************************************************************************
@@ -350,7 +351,7 @@ void filter_point_class::twist_cb(const geometry_msgs::TwistStamped::ConstPtr& m
 }
 
 // ***************************************************************************
-pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT)
+pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT, bool isHolonomic)
 {
 	if(indxVoxIn == (voxArrSize_ - 1))
 	return point2_to_point3(voxArr_[indxVoxIn], true);
@@ -370,21 +371,31 @@ pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float
 	tf2::Quaternion basePRot;
 	tf2::Vector3 basePTrans;
 	
-	basePRot.setRPY(0, 0, actArr_[indxAct][2]*deltaT);
-	
-	if (actArr_[indxAct][2] == 0)
+	switch(isHolonomic)
 	{
+	case true:
 		basePTrans.setX( actArr_[indxAct][0] * deltaT );
-		basePTrans.setY( 0 );
-		basePTrans.setZ( actArr_[indxAct][1] * deltaT );		
+		basePTrans.setY( actArr_[indxAct][1] * deltaT );
+		basePTrans.setZ( actArr_[indxAct][2] * deltaT );		
+
+		basePRot.setRPY(0, 0, 0);
+		break;	
+				
+	default:
+		if (actArr_[indxAct][2] == 0)
+		{
+			basePTrans.setX( actArr_[indxAct][0] * deltaT );
+			basePTrans.setY( 0 );
+			basePTrans.setZ( actArr_[indxAct][1] * deltaT );		
+		}
+		else
+		{
+			basePTrans.setX( (actArr_[indxAct][0]/actArr_[indxAct][2]) * sin(actArr_[indxAct][2]*deltaT) );
+			basePTrans.setY( (actArr_[indxAct][0]/actArr_[indxAct][2]) * (1 - cos(actArr_[indxAct][2]*deltaT)) );
+			basePTrans.setZ( actArr_[indxAct][1] * deltaT );
+		}
+		basePRot.setRPY(0, 0, actArr_[indxAct][2]*deltaT);
 	}
-	else
-	{
-		basePTrans.setX( (actArr_[indxAct][0]/actArr_[indxAct][2]) * sin(actArr_[indxAct][2]*deltaT) );
-		basePTrans.setY( (actArr_[indxAct][0]/actArr_[indxAct][2]) * (1 - cos(actArr_[indxAct][2]*deltaT)) );
-		basePTrans.setZ( actArr_[indxAct][1] * deltaT );
-	}
-	
 	tf2::Transform baseP2base( basePRot, basePTrans );
 	
 	/*
@@ -685,20 +696,33 @@ bool filter_point_class::is_valid(const pcl::PointXYZ& point)
 }
 
 // ***************************************************************************
-void filter_point_class::publish_action(int actIndx)
+void filter_point_class::publish_action(int actIndx, bool isHolonomic)
 {
 	geometry_msgs::TwistStamped actMsg;
 	
 	actMsg.header.stamp = ros::Time::now();
 	actMsg.header.frame_id = baseFrameId_;
 	
-	actMsg.twist.linear.x = actArr_[actIndx][0];
-	actMsg.twist.linear.y = 0;
-	actMsg.twist.linear.z = actArr_[actIndx][1];
-	
-	actMsg.twist.angular.x = 0;
-	actMsg.twist.angular.y = actIndx;
-	actMsg.twist.angular.z = actArr_[actIndx][2];
+	if (isHolonomic)
+	{
+		actMsg.twist.linear.x = actArr_[actIndx][0];
+		actMsg.twist.linear.y = actArr_[actIndx][1];
+		actMsg.twist.linear.z = actArr_[actIndx][2];
+		
+		actMsg.twist.angular.x = 0;
+		actMsg.twist.angular.y = actIndx;
+		actMsg.twist.angular.z = 0;
+	}
+	else
+	{
+		actMsg.twist.linear.x = actArr_[actIndx][0];
+		actMsg.twist.linear.y = 0;
+		actMsg.twist.linear.z = actArr_[actIndx][1];
+		
+		actMsg.twist.angular.x = 0;
+		actMsg.twist.angular.y = actIndx;
+		actMsg.twist.angular.z = actArr_[actIndx][2];
+	}
 	
 	actPub_.publish(actMsg);
 }

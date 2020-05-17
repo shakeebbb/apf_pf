@@ -17,21 +17,21 @@
 		<param name="n_particles_vox" type="int" value="50000"/>
 		<param name="outliers_per_voxel" type="int" value="20"/>
 		
-		<rosparam param="trans_noise_sdev"> [3, 0.3] </rosparam> <!-- voxels, distance -->
-		<rosparam param="obsv_noise_sdev"> [100, 10] </rosparam> <!-- confidence points, nOutliers -->
+		<rosparam param="trans_noise_sdev"> [5, 0.3] </rosparam> <!-- voxels, distance -->
+		<rosparam param="obsv_noise_sdev"> [50, 3] </rosparam> <!-- confidence points, nOutliers -->
 		
-		<rosparam param="max_action_values"> [0.4, 0.2, 6.28] </rosparam>
-		<rosparam param="min_action_values"> [0, -0.2, -6.28] </rosparam>
-		<rosparam param="action_intervals"> [0.1, 0.1, 6.28] </rosparam>
+		<rosparam param="max_action_values"> [0.4, 0.4, 0.4] </rosparam>
+		<rosparam param="min_action_values"> [-0.4, -0.4, -0.4] </rosparam>
+		<rosparam param="action_intervals"> [0.2, 0.2, 0.2] </rosparam>
 		
-		<rosparam param="reward_Q"> [0.001, 0.001, 0.001] </rosparam>
+		<rosparam param="reward_Q"> [0.7, 0.7, 0.7] </rosparam>
 		<param name="repulsive_potential_max_distance" type="double" value="1.2"/>
-		<param name="repulsive_potential_gain" type="double" value="10"/>
+		<param name="repulsive_potential_gain" type="double" value="0.5"/>
 		
 		<param name="alpha_vector_iterations" type="int" value="10"/>
 		
-		<param name="lookahead_time" type="double" value="1"/>
-		<param name="sampling_time" type="double" value="0.05"/>
+		<param name="lookahead_time" type="double" value="0.5"/>
+		<param name="sampling_time" type="double" value="0.1"/>
 		<param name="base_frame_id" type="string" value="base_link"/>
 		
 	</node>
