@@ -17,7 +17,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	while( (isInitialized_ & 0x03) != 0x03 )
 	ros::spinOnce();
 	
-	ptVizPub_ = nh->advertise<visualization_msgs::Marker>("filter_point_node/pt_cloud_viz", 100);
+	vizPub_ = nh->advertise<visualization_msgs::MarkerArray>("filter_point_node/viz_out", 100);
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_out", 100);
 	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_piv_out", 100);
 	actPub_ = nh->advertise<geometry_msgs::TwistStamped>("filter_point_node/twist_out", 100);
@@ -264,8 +264,9 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 	{
 		extract_features(msgPtr);
 		update_belief();
-		publish_action(update_action());
-		publish_voxels();
+		int actIndx = update_action();
+		publish_action(actIndx);
+		publish_viz("all", actIndx);
 		display("beliefs", 3);
 	}
 	
@@ -725,82 +726,18 @@ void filter_point_class::publish_action(int actIndx, bool isHolonomic)
 	}
 	
 	actPub_.publish(actMsg);
-}
-		
-// ***************************************************************************
-void filter_point_class::publish_voxels()
-{
-	visualization_msgs::Marker markerMsg;
-	
-	markerMsg.header.frame_id = camFrameId_;
-	markerMsg.header.stamp = ros::Time::now();
-	markerMsg.type = visualization_msgs::Marker::CUBE_LIST;
-	markerMsg.action = visualization_msgs::Marker::ADD;
-	markerMsg.lifetime = ros::Duration(0);
-	markerMsg.frame_locked = true;
-	
-	geometry_msgs::Pose pose;
-	pose.orientation.w = 1;
-	markerMsg.pose = pose;
-	
-	geometry_msgs::Vector3 scale;
-	scale.x = 0.05;
-	scale.y = 0.05;
-	scale.z = 0.05;
-	markerMsg.scale = scale;
-	
-	markerMsg.ns = "filter_point";
 	
 	std::vector<double> probVec;
 	probVec = voxBeliefDistr_.probabilities();
-	
+		
 	std::vector<double>::iterator domItr = std::max_element(probVec.begin(), probVec.end());
 	int domIndx = domItr - probVec.begin();
 	float domProb = *domItr;
-	
-	for (int i=0; i<voxArrSize_; i++)
-	{
-		markerMsg.id = i;
 		
-		geometry_msgs::Point pt;
-		pcl::PointXYZ pt3 = point2_to_point3(voxArr_[i], true);
-		pt.x = pt3.x;
-		pt.y = pt3.y;
-		pt.z = pt3.z;
-		markerMsg.points.push_back(pt);
-		
-		//float shade = voxBeliefDistr_.probabilities()[i] / domProb; // float(voxBeliefArr_[i])/float(voxBeliefArr_[domVoxIndx_]);
-		
-		float shade;
-		if(voxBeliefDistr_.probabilities()[i] == 0)
-		shade = 0;
-		else
-		shade = 1;
-		
-		std_msgs::ColorRGBA color;
-		color.r = shade; 
-		color.g = 0; 
-		color.b = 1 - color.r; 
-		color.a = 1;
-		markerMsg.colors.push_back(color);
-	}
-	
-	ptVizPub_.publish(markerMsg);
-			
 	geometry_msgs::PointStamped ptMsg;
 	ptMsg.header.stamp = ros::Time::now();
 	ptMsg.header.frame_id = camFrameId_;
-	
-	//for (int i=0; i<voxArrSize_; i++)
-	//{
-	//	std::cout << voxBeliefDistr_.probabilities()[i] << std::endl;
-	//}
-	
-	//std::cout << "here" << std::endl;
-	
-								
-	//std::cout << "here2" << std::endl;
-	
+		
 	pcl::PointXYZ pt3 = point2_to_point3(voxArr_[domIndx], true);
 
 	ptMsg.point.x = pt3.x;
@@ -808,7 +745,7 @@ void filter_point_class::publish_voxels()
 	ptMsg.point.z = pt3.z;
 
 	ptPub_.publish(ptMsg);
-	
+		
 	geometry_msgs::PointStamped ptPivMsg;
 	ptPivMsg.header.stamp = ros::Time::now();
 	ptPivMsg.header.frame_id = camFrameId_;
@@ -817,6 +754,106 @@ void filter_point_class::publish_voxels()
 	ptPivMsg.point.z = ptPiv_.z;
 
 	ptPivPub_.publish(ptPivMsg);
+}
+		
+// ***************************************************************************
+void filter_point_class::publish_viz(std::string field, int actIndx)
+{
+	visualization_msgs::MarkerArray markerArrMsg;
+	
+	if (field == "all" || field == "voxels")
+	{
+		visualization_msgs::Marker markerMsg;
+	
+		markerMsg.header.stamp = ros::Time::now();
+		markerMsg.action = visualization_msgs::Marker::ADD;
+		markerMsg.lifetime = ros::Duration(0);
+		markerMsg.frame_locked = true;	
+		
+		markerMsg.ns = "filter_point_voxels";
+		markerMsg.header.frame_id = camFrameId_;
+		markerMsg.type = visualization_msgs::Marker::CUBE_LIST;
+		
+		geometry_msgs::Pose geoPose;
+		geoPose.orientation.w = 1;
+		markerMsg.pose = geoPose;
+		
+		geometry_msgs::Vector3 scale;
+		scale.x = 0.05;
+		scale.y = 0.05;
+		scale.z = 0.05;
+		markerMsg.scale = scale;
+		
+		for (int i=0; i<voxArrSize_; i++)
+		{
+			markerMsg.id = i;
+			
+			geometry_msgs::Point pt;
+			pcl::PointXYZ pt3 = point2_to_point3(voxArr_[i], true);
+			pt.x = pt3.x;
+			pt.y = pt3.y;
+			pt.z = pt3.z;
+			markerMsg.points.push_back(pt);
+			
+			float shade;
+			if(voxBeliefDistr_.probabilities()[i] == 0)
+			shade = 0;
+			else
+			shade = 1;
+			
+			std_msgs::ColorRGBA color;
+			color.r = shade; 
+			color.g = 0; 
+			color.b = 1 - color.r; 
+			color.a = 1;
+			markerMsg.colors.push_back(color);
+		}
+		
+		markerArrMsg.markers.push_back(markerMsg);
+	}
+	
+	if (field == "all" || field == "actions")
+	{
+		visualization_msgs::Marker markerMsg;
+	
+		markerMsg.header.stamp = ros::Time::now();
+		markerMsg.action = visualization_msgs::Marker::ADD;
+		markerMsg.lifetime = ros::Duration(0);
+		markerMsg.frame_locked = true;	
+		
+		markerMsg.ns = "filter_point_actions";
+		markerMsg.header.frame_id = baseFrameId_;
+		markerMsg.type = visualization_msgs::Marker::ARROW;
+		
+		geometry_msgs::Pose geoPose;
+		geoPose.orientation.w = 1;
+		markerMsg.pose = geoPose;
+		
+		markerMsg.id = 0;
+		
+		geometry_msgs::Point geoPt;
+		geoPt.x = 0; geoPt.y = 0; geoPt.z = 0;
+		markerMsg.points.push_back(geoPt);
+		
+		geoPt.x = actArr_[actIndx][0];
+		geoPt.y = actArr_[actIndx][1];
+		geoPt.z = actArr_[actIndx][2];
+		markerMsg.points.push_back(geoPt);
+
+		markerMsg.color.r = 1; 
+		markerMsg.color.g = 0; 
+		markerMsg.color.b = 0; 
+		markerMsg.color.a = 1;
+		
+		markerMsg.scale.x = 0.03;
+		markerMsg.scale.y = 0.06;
+		markerMsg.scale.z = 0.09;	
+		
+		markerArrMsg.markers.push_back(markerMsg);
+	}
+	
+	if (markerArrMsg.markers.size() > 0)
+	vizPub_.publish(markerArrMsg);
 }
 		
 // ***************************************************************************

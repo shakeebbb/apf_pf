@@ -20,9 +20,9 @@
 		<rosparam param="trans_noise_sdev"> [5, 0.3] </rosparam> <!-- voxels, distance -->
 		<rosparam param="obsv_noise_sdev"> [50, 3] </rosparam> <!-- confidence points, nOutliers -->
 		
-		<rosparam param="max_action_values"> [0.4, 0.4, 0.4] </rosparam>
+		<rosparam param="max_action_values"> [0.0, 0.4, 0.4] </rosparam>
 		<rosparam param="min_action_values"> [-0.4, -0.4, -0.4] </rosparam>
-		<rosparam param="action_intervals"> [0.2, 0.2, 0.2] </rosparam>
+		<rosparam param="action_intervals"> [0.1, 0.1, 0.1] </rosparam>
 		
 		<rosparam param="reward_Q"> [0.7, 0.7, 0.7] </rosparam>
 		<param name="repulsive_potential_max_distance" type="double" value="1.2"/>
@@ -42,6 +42,6 @@
 	</node>
 </group>
 
-<node pkg="tf" type="static_transform_publisher" name="cam2base" args="0 0 0 -1.57 0 -1.57 base_link royale_camera_optical_frame 100" />
+<node pkg="tf2_ros" type="static_transform_publisher" name="cam2base" args="0 0 0 -1.57 0 -1.57 royale_camera_optical_frame base_link " />
 	
 </launch>

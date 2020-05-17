@@ -17,7 +17,7 @@
 #include "geometry_msgs/Vector3Stamped.h"
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/CameraInfo.h"
-#include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
 #include "tf2/LinearMath/Transform.h"
 #include "tf2_ros/transform_listener.h"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -32,8 +32,8 @@ private:
 	ros::Subscriber camInfoSub_;
 	ros::Subscriber twistSub_;
 	ros::Subscriber imuSub_;
-	
-	ros::Publisher ptVizPub_;
+
+	ros::Publisher vizPub_;
 	ros::Publisher ptPub_;
 	ros::Publisher ptPivPub_;
 	ros::Publisher actPub_;
@@ -133,7 +133,7 @@ public:
 	void extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&);
 	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, float&);
 	bool is_valid(const pcl::PointXYZ&);
-	void publish_voxels();
+	void publish_viz(std::string = "all", int = 0);
 	void publish_action(int, bool = true);
 	void display(std::string, int);
 	float norm_pdf(float, float, float, bool = true);
