@@ -1,0 +1,86 @@
+<launch>
+
+	<arg name="launch_filter_point" default="true"/>
+	<arg name="launch_noise_cloud" default="false"/>
+	
+	<arg name="launch_goal_to_vel" default="false"/>
+	<arg name="publish_dummy_transforms" default="true"/>
+	
+	<arg name="imu_frame" value="imu_link"/>
+	<arg name="base_frame" value="base_link"/>
+
+	<!-- .................................................... -->
+	
+	<node if="$(arg launch_filter_point)" name="filter_point_node" pkg="local_planning" type="filter_point_node" output="screen">
+		
+		<remap from="filter_point_node/pt_cloud_in" to="/iris/vi_sensor/camera_depth/depth/points"/>
+		<remap from="filter_point_node/cam_info_in" to="/iris/vi_sensor/camera_depth/depth/camera_info"/>
+		<remap from="filter_point_node/pt_cloud_viz" to="filter_point_node/pt_cloud_viz"/>
+		<remap from="filter_point_node/pt_out" to="filter_point_node/pt_out"/>
+		
+		<param name="read_write" type="bool" value="false"/>
+		<param name="matrices_file_path" type="string" value="$(find local_planning)/configs"/>
+			
+		<param name="distance_interval" type="double" value="0.1"/>
+		<param name="pixel_interval" type="int" value="50"/>
+		<param name="min_distance" type="double" value="0.15"/>
+		<param name="max_distance" type="double" value="1.2"/>
+		<param name="n_particles_vox" type="int" value="50000"/>
+		<param name="outliers_per_voxel" type="int" value="20"/>
+			
+		<rosparam param="trans_noise_sdev"> [8, 0.4] </rosparam> <!-- voxels, distance -->
+		<rosparam param="obsv_noise_sdev"> [200, 10] </rosparam> <!-- confidence points, nOutliers -->
+			
+		<rosparam param="max_action_values"> [0.0, 0.4, 0.4] </rosparam>
+		<rosparam param="min_action_values"> [-0.4, -0.4, -0.4] </rosparam>
+		<rosparam param="action_intervals"> [0.1, 0.1, 0.1] </rosparam>
+			
+		<rosparam param="reward_Q"> [0.7, 0.7, 0.7] </rosparam>
+		<param name="repulsive_potential_max_distance" type="double" value="1.2"/>
+		<param name="repulsive_potential_gain" type="double" value="2"/>
+			
+		<param name="alpha_vector_iterations" type="int" value="10"/>
+			
+		<param name="lookahead_time" type="double" value="0.5"/>
+		<param name="sampling_time" type="double" value="0.1"/>
+		<param name="base_frame_id" type="string" value="iris/base_link"/>
+			
+	</node>
+
+	<!-- .................................................... -->
+
+	<node if="$(arg launch_noise_cloud)" name="noise_cloud_node" pkg="local_planning" type="noise_cloud_node" output="screen">
+		
+		<remap from="noise_cloud_node/pt_cloud_in" to="/royale_camera_driver/point_cloud"/>
+			
+	</node>
+
+	<!-- .................................................... -->
+
+	<node if="$(arg launch_goal_to_vel)" name="goal_to_vel_node" pkg="drone_pose" type="goal_to_vel_node" output="screen">
+		<param name="publish_rate" value="10"/>
+		<param name="max_yaw" value="1.00"/>
+		<param name="merge_output_vectors" value="true"/>
+		<param name="holonomic" value="false"/>
+		<param name="yaw_err_bound_nonzero_fore_vel_in_rad" value="1.57"/>
+		<param name="base_frame_id" value="$(arg base_frame)"/>
+		<param name="imuFrameId_" value="$(arg imu_frame)"/>
+			
+		<remap from="goal_to_vel_node/imu_in" to="goal_to_vel_node/imu_in"/>
+			
+		<remap from="goal_to_vel_node/goal_pt_in" to="goal_to_vel_node/goal_pt_in"/>	
+		<remap from="goal_to_vel_node/rep_vel_in" to="goal_to_vel_node/rep_vel_in"/>
+
+		<remap from="goal_to_vel_node/att_vel_out" to="goal_to_vel_node/att_vel_out"/>
+		<remap from="goal_to_vel_node/rep_vel_out" to="goal_to_vel_node/rep_vel_out"/>
+	</node>
+
+	<!-- .................................................... -->
+
+	<group if="$(arg publish_dummy_transforms)">
+		<node pkg="tf2_ros" type="static_transform_publisher" name="world2odom" args="0 0 0 0 0 0 iris/vi_sensor/camera_depth_optical_center_link base_link"/>
+
+		<!--node pkg="tf2_ros" type="static_transform_publisher" name="cam2base" args="0 0 0 -1.57 0 -1.57 iris/vi_sensor/camera_depth_optical_center_link base_link " /-->
+	</group>
+	
+</launch>

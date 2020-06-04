@@ -1,0 +1,24 @@
+<launch>
+  <include file="$(find rotors_gazebo)/launch/mav_hovering_example_with_vi_sensor.launch">
+  	<arg name="world_name" value="basic"/>
+  	<arg name="mav_name" value="iris"/>
+  </include>
+  
+  <include file="$(find drone_pose)/launch/complete.launch"/>
+  
+  <!--node pkg="ros_conversions" name="keyboard_to_joy" type="keyboard_to_joy" output="screen">
+		<remap from="/keyboard_to_joy/joy_out" to="/joy"/>
+		
+		<rosparam command="load" file="$(find ros_conversions)/params/keyboard_to_joy.yaml" />
+	</node-->
+	
+	<node name="pose_to_posestamped" pkg="ros_conversions" type="pose_to_posestamped" output="screen">
+		<remap from="pose_to_posestamped/pose_in" to="/iris/ground_truth/pose"/>
+		<remap from="pose_to_posestamped/posestamped_in" to="pose_to_posestamped/posestamped_in"/>
+			
+		<remap from="pose_to_posestamped/pose_out" to="pose_to_posestamped/pose_out"/>
+		<remap from="pose_to_posestamped/posestamped_out" to="/A01/mavros/local_position/pose"/>
+			
+		<param name="frame_id" value="odom"/>
+	</node>
+</launch>

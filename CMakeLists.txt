@@ -133,7 +133,8 @@ include_directories(
 
 ## Declare a C++ library
  add_library(filter_point
-   src/filter_point.cpp
+   src/filter_point_main.cpp
+   src/filter_point_aux.cpp
  )
 
 ## Add cmake target dependencies of the library

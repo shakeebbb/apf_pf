@@ -3,13 +3,13 @@
 // ***************************************************************************
 filter_point_class::filter_point_class(ros::NodeHandle* nh)
 {
-	// ROS stuff
-	wait_for_params(nh);	
+	// ROS Stuff
+	wait_for_params(nh);
 	
-	ptCloudSub_ = nh->subscribe("filter_point_node/pt_cloud_in", 100, &filter_point_class::pt_cloud_cb, this);
-	camInfoSub_ = nh->subscribe("filter_point_node/cam_info_in", 100, &filter_point_class::cam_info_cb, this);
-	twistSub_ = nh->subscribe("filter_point_node/twist_in", 100, &filter_point_class::twist_cb, this);
-	imuSub_ = nh->subscribe("filter_point_node/imu_in", 100, &filter_point_class::imu_cb, this);
+	ptCloudSub_ = nh->subscribe("filter_point_node/pt_cloud_in", 1, &filter_point_class::pt_cloud_cb, this);
+	camInfoSub_ = nh->subscribe("filter_point_node/cam_info_in", 1, &filter_point_class::cam_info_cb, this);
+	twistSub_ = nh->subscribe("filter_point_node/twist_in", 1, &filter_point_class::twist_cb, this);
+	imuSub_ = nh->subscribe("filter_point_node/imu_in", 1, &filter_point_class::imu_cb, this);
 	
 	isInitialized_ = 0x00;
 	
@@ -43,26 +43,25 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	camToBaseTransform_ = tfBuffer_.lookupTransform (baseFrameId_, camFrameId_, ros::Time(0));
 	
-	ROS_INFO("Populating transition model ..."); 
-	populate_transition_model();
+	fout_ = new std::fstream;
+	if (!readFromFile_)
+	{
+		ROS_INFO("Populating transition model ..."); 
+		populate_transition_model();
 	
-	//display("states", 3);
-	//display("observations", 3);
-	//display("actions", 3);
-	
-	ROS_INFO("Populating reward model ...");
-	populate_reward_model();
-	
-	//display("rewards", 3);
-	
-	
-	ROS_INFO("Computing alpha vectors ...");
-	compute_alpha_vectors(alphaItr_);
-	
-	//display("alphas", 3);
-	//display("belief", 3);
-	
-	//getchar();
+		ROS_INFO("Populating reward model ...");
+		populate_reward_model();
+		
+		ROS_INFO("Computing alpha vectors ...");
+		compute_alpha_vectors(alphaItr_);
+		
+		if (!write_to_file(filePath_))
+			ROS_WARN("File write unsuccesful");
+	}
+	else
+	{
+		read_from_file(filePath_);
+	}
 }
 
 // ***************************************************************************
@@ -115,17 +114,6 @@ void filter_point_class::populate_reward_model()
 				rewMat_(i, j) -= repulsive_potential( apply_action(i, j, k*deltaT_) );						
 			}
 		}
-}
-
-// ***************************************************************************
-float filter_point_class::repulsive_potential(pcl::PointXYZ x_xobs)
-{
-	float dist = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), x_xobs);
-	
-	if (dist >= repPotMaxDist_)
-	return 0;
-	
-	return 0.5*repPotGain_*pow(1/dist - 1/repPotMaxDist_, 2);
 }
 
 // ***************************************************************************
@@ -246,6 +234,9 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/sampling_time", deltaT_));
 	while(!nh->getParam("filter_point_node/base_frame_id", baseFrameId_));
 	
+	while(!nh->getParam("filter_point_node/matrices_file_path", filePath_));
+	while(!nh->getParam("filter_point_node/read_write", readFromFile_));
+	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
 
@@ -321,37 +312,6 @@ void filter_point_class::imu_cb(const sensor_msgs::Imu::ConstPtr& msgPtr)
 }
 
 // ***************************************************************************
-void filter_point_class::twist_cb(const geometry_msgs::TwistStamped::ConstPtr& msgPtr)
-{
-	geometry_msgs::Vector3Stamped linVelIn;
-	linVelIn.header = msgPtr->header;
-	linVelIn.vector = msgPtr->twist.linear;
-	
-	geometry_msgs::Vector3Stamped angVelIn;
-	angVelIn.header = msgPtr->header;
-	angVelIn.vector = msgPtr->twist.angular;
-	
-	geometry_msgs::Vector3Stamped linVelOut;
-	geometry_msgs::Vector3Stamped angVelOut;
-	
-	try
-	{
-		geometry_msgs::TransformStamped twistTransform = tfBuffer_.lookupTransform (baseFrameId_, msgPtr->header.frame_id, ros::Time(0));
-		tf2::doTransform(linVelIn, linVelOut, twistTransform);
-		tf2::doTransform(angVelIn, angVelOut, twistTransform);
-		
-		robotVel_.header = twistTransform.header;
-		robotVel_.twist.linear = linVelOut.vector;
-		robotVel_.twist.linear = angVelOut.vector;
-	}
-	catch(tf2::TransformException &ex)
-	{
-		ROS_WARN("%s",ex.what());
-		robotVel_ = *msgPtr;
-	}
-}
-
-// ***************************************************************************
 pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT, bool isHolonomic)
 {
 	if(indxVoxIn == (voxArrSize_ - 1))
@@ -419,101 +379,6 @@ pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float
 	tf2::Vector3 point3Tf = cam2base.inverse() * baseP2base.inverse() * cam2base * tf2::Vector3(point3.x, point3.y, point3.z);
 	
 	return pcl::PointXYZ(point3Tf.x(), point3Tf.y(), point3Tf.z());
-}
-
-// ***************************************************************************
-int filter_point_class::point2_to_voxel(pcl::PointXYZ pointIn)
-{
-	pcl::PointXYZ pointOut;
-	
-	int xIndx = floor(float(pointIn.x) / float(pixInt_));
-	int yIndx = floor(float(pointIn.y) / float(pixInt_));
-	int zIndx = floor((pointIn.z - minDist_) / distInt_);
-	
-	return xIndx + voxGridWidth_*(yIndx + voxGridHeight_*zIndx);
-}
-
-// ***************************************************************************
-pcl::PointXYZ filter_point_class::point2_to_point3(pcl::PointXYZ pointIn, bool direction)
-{
-	pcl::PointXYZ pointOut;
-	
-	float fx = camInfoP_[0];
-	float cx = camInfoP_[2];
-	float fy = camInfoP_[5];
-	float cy = camInfoP_[6];
-	
-	//std::cout << "Camera intrinsics: " << fx << ", " << cx << ", " << fy << ", " << cy << std::endl;
-		
-	if(direction) // u,v,w => x,y,z
-	{
-		pointOut.x = (pointIn.x - cx) * pointIn.z / fx;
-		pointOut.y = (pointIn.y - cy) * pointIn.z / fy;
-		pointOut.z = pointIn.z;
-	}
-	else // x,y,z => u,v,w
-	{		
-		pointOut.x = (pointIn.x / pointIn.z) * fx + cx;
-		pointOut.y = (pointIn.y / pointIn.z) * fy + cy;
-		pointOut.z = pointIn.z;
-	}
-	
-	return pointOut;
-}
-
-// ***************************************************************************
-float filter_point_class::man_dist_vox(int indxVox1, int indxVox2)
-{
-	if( indxVox1 == (voxArrSize_ - 1) )
-	return man_dist_to_bound(indxVox2);
-	
-	if( indxVox2 == (voxArrSize_ - 1) )
-	return man_dist_to_bound(indxVox1);
-	
-	return abs( (voxArr_[indxVox2].x - voxArr_[indxVox1].x) / pixInt_ ) + 
-				 abs( (voxArr_[indxVox2].y - voxArr_[indxVox1].y) /pixInt_ ) + 
-				 abs( (voxArr_[indxVox2].z - voxArr_[indxVox1].z) /distInt_ );
-}
-
-// ***************************************************************************
-float filter_point_class::man_dist_to_bound(int indxVox)
-{	
-	float dist[5];
-	
-	// right, left, front, upper, lower
-	
-	dist[0] = abs( voxArr_[indxVox].x / pixInt_ - voxGridWidth_ ); 
-	dist[1] = abs( voxArr_[indxVox].x / pixInt_ + 1 );
-	dist[2] = abs( (voxArr_[indxVox].z - minDist_) / distInt_ - voxGridDepth_ );
-	dist[3] = abs( voxArr_[indxVox].y / pixInt_ + 1 );
-	dist[4] = abs( voxArr_[indxVox].y / pixInt_ - voxGridHeight_); 
-	
-	return *std::min_element(dist, dist+5);
-}
-
-// ***************************************************************************
-pcl::PointXYZ filter_point_class::indx_to_vox(int indxVox)
-{
-	pcl::PointXYZ outVox;
-	
-	outVox.z = floor(float(indxVox) / float(voxGridWidth_*voxGridHeight_));
-	outVox.y = floor(float(indxVox - outVox.z*voxGridWidth_*voxGridHeight_) / float(voxGridWidth_));
-	outVox.x = indxVox - outVox.z*voxGridWidth_*voxGridHeight_ - outVox.y*voxGridWidth_;
-	
-	return outVox;
-}
-
-// ***************************************************************************
-float filter_point_class::norm_pdf(float mean, float sdev, float xIn, bool isFull)
-{
-    static const float inv_sqrt_2pi = 0.3989422804014327;
-    float a = (xIn - mean) / sdev;
-    
-    //if( isFull || (xIn == mean) ) 
-    if(isFull)
-		return inv_sqrt_2pi / sdev * std::exp(-0.5f * a * a);
-		else
-		return 2 * inv_sqrt_2pi / sdev * std::exp(-0.5f * a * a);
 }
 
 // ***************************************************************************
@@ -621,23 +486,6 @@ filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefD
 	
 	return std::discrete_distribution<int>(updatedBelief, updatedBelief+initBeliefDist.probabilities().size());
 }
-
-// ***************************************************************************
-int filter_point_class::random_index(float* belief, int& size)
-{
-	std::discrete_distribution<int> distObject(belief, belief+size);
-	std::cout << "Probabilities: " << "[ ";
-	
-	for(int i=0; i<size; i++)
-		std::cout << distObject.probabilities()[i] << ", ";
-	std::cout << " ]" << std::endl;
-			
-	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-			
-	std::default_random_engine generator(seed);
-			
-	return distObject(generator);	
-} 
 		
 // ***************************************************************************
 void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& ptCloudPtr)
@@ -669,265 +517,5 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
   	}
   }
 }
-		
-// ***************************************************************************
-bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, int& indexVox, float& distVox)
-{
-	//distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
-	
-	distVox = pt.z;
-	
-	if((distVox > maxDist_) || (distVox < minDist_))
-	return false;
-	
-	//std::cout << "Detected valid points at distance: " << distVox << std::endl;
-	int indexVoxX = floor(float(indexPt % imgWidth_) / float(pixInt_));
-	int indexVoxY = floor(floor(float(indexPt)/float(imgWidth_)) / float(pixInt_));
-	int indexVoxZ = floor((distVox - minDist_) /  distInt_);
-			
-	indexVox = indexVoxX + voxGridWidth_*(indexVoxY + voxGridHeight_*indexVoxZ);
-			
-	return true;
-}
-		
-// ***************************************************************************
-bool filter_point_class::is_valid(const pcl::PointXYZ& point)
-{
-	return !(isnan(point.x) || isnan(point.y) || isnan(point.z));
-}
-
-// ***************************************************************************
-void filter_point_class::publish_action(int actIndx, bool isHolonomic)
-{
-	geometry_msgs::TwistStamped actMsg;
-	
-	actMsg.header.stamp = ros::Time::now();
-	actMsg.header.frame_id = baseFrameId_;
-	
-	if (isHolonomic)
-	{
-		actMsg.twist.linear.x = actArr_[actIndx][0];
-		actMsg.twist.linear.y = actArr_[actIndx][1];
-		actMsg.twist.linear.z = actArr_[actIndx][2];
-		
-		actMsg.twist.angular.x = 0;
-		actMsg.twist.angular.y = actIndx;
-		actMsg.twist.angular.z = 0;
-	}
-	else
-	{
-		actMsg.twist.linear.x = actArr_[actIndx][0];
-		actMsg.twist.linear.y = 0;
-		actMsg.twist.linear.z = actArr_[actIndx][1];
-		
-		actMsg.twist.angular.x = 0;
-		actMsg.twist.angular.y = actIndx;
-		actMsg.twist.angular.z = actArr_[actIndx][2];
-	}
-	
-	actPub_.publish(actMsg);
-	
-	std::vector<double> probVec;
-	probVec = voxBeliefDistr_.probabilities();
-		
-	std::vector<double>::iterator domItr = std::max_element(probVec.begin(), probVec.end());
-	int domIndx = domItr - probVec.begin();
-	float domProb = *domItr;
-		
-	geometry_msgs::PointStamped ptMsg;
-	ptMsg.header.stamp = ros::Time::now();
-	ptMsg.header.frame_id = camFrameId_;
-		
-	pcl::PointXYZ pt3 = point2_to_point3(voxArr_[domIndx], true);
-
-	ptMsg.point.x = pt3.x;
-	ptMsg.point.y = pt3.y;
-	ptMsg.point.z = pt3.z;
-
-	ptPub_.publish(ptMsg);
-		
-	geometry_msgs::PointStamped ptPivMsg;
-	ptPivMsg.header.stamp = ros::Time::now();
-	ptPivMsg.header.frame_id = camFrameId_;
-	ptPivMsg.point.x = ptPiv_.x;
-	ptPivMsg.point.y = ptPiv_.y;
-	ptPivMsg.point.z = ptPiv_.z;
-
-	ptPivPub_.publish(ptPivMsg);
-}
-		
-// ***************************************************************************
-void filter_point_class::publish_viz(std::string field, int actIndx)
-{
-	visualization_msgs::MarkerArray markerArrMsg;
-	
-	if (field == "all" || field == "voxels")
-	{
-		visualization_msgs::Marker markerMsg;
-	
-		markerMsg.header.stamp = ros::Time::now();
-		markerMsg.action = visualization_msgs::Marker::ADD;
-		markerMsg.lifetime = ros::Duration(0);
-		markerMsg.frame_locked = true;	
-		
-		markerMsg.ns = "filter_point_voxels";
-		markerMsg.header.frame_id = camFrameId_;
-		markerMsg.type = visualization_msgs::Marker::CUBE_LIST;
-		
-		geometry_msgs::Pose geoPose;
-		geoPose.orientation.w = 1;
-		markerMsg.pose = geoPose;
-		
-		geometry_msgs::Vector3 scale;
-		scale.x = 0.05;
-		scale.y = 0.05;
-		scale.z = 0.05;
-		markerMsg.scale = scale;
-		
-		for (int i=0; i<voxArrSize_; i++)
-		{
-			markerMsg.id = i;
-			
-			geometry_msgs::Point pt;
-			pcl::PointXYZ pt3 = point2_to_point3(voxArr_[i], true);
-			pt.x = pt3.x;
-			pt.y = pt3.y;
-			pt.z = pt3.z;
-			markerMsg.points.push_back(pt);
-			
-			float shade;
-			if(voxBeliefDistr_.probabilities()[i] == 0)
-			shade = 0;
-			else
-			shade = 1;
-			
-			std_msgs::ColorRGBA color;
-			color.r = shade; 
-			color.g = 0; 
-			color.b = 1 - color.r; 
-			color.a = 1;
-			markerMsg.colors.push_back(color);
-		}
-		
-		markerArrMsg.markers.push_back(markerMsg);
-	}
-	
-	if (field == "all" || field == "actions")
-	{
-		visualization_msgs::Marker markerMsg;
-	
-		markerMsg.header.stamp = ros::Time::now();
-		markerMsg.action = visualization_msgs::Marker::ADD;
-		markerMsg.lifetime = ros::Duration(0);
-		markerMsg.frame_locked = true;	
-		
-		markerMsg.ns = "filter_point_actions";
-		markerMsg.header.frame_id = baseFrameId_;
-		markerMsg.type = visualization_msgs::Marker::ARROW;
-		
-		geometry_msgs::Pose geoPose;
-		geoPose.orientation.w = 1;
-		markerMsg.pose = geoPose;
-		
-		markerMsg.id = 0;
-		
-		geometry_msgs::Point geoPt;
-		geoPt.x = 0; geoPt.y = 0; geoPt.z = 0;
-		markerMsg.points.push_back(geoPt);
-		
-		geoPt.x = actArr_[actIndx][0];
-		geoPt.y = actArr_[actIndx][1];
-		geoPt.z = actArr_[actIndx][2];
-		markerMsg.points.push_back(geoPt);
-
-		markerMsg.color.r = 1; 
-		markerMsg.color.g = 0; 
-		markerMsg.color.b = 0; 
-		markerMsg.color.a = 1;
-		
-		markerMsg.scale.x = 0.03;
-		markerMsg.scale.y = 0.06;
-		markerMsg.scale.z = 0.09;	
-		
-		markerArrMsg.markers.push_back(markerMsg);
-	}
-	
-	if (markerArrMsg.markers.size() > 0)
-	vizPub_.publish(markerArrMsg);
-}
-		
-// ***************************************************************************
-void filter_point_class::display(std::string field, int precision)
-{
-	std::cout << std::setprecision(precision) << std::endl;
-	std::cout << "<===============================================>" << std::endl; 
-	std::cout << "Number of possible states: " << voxArrSize_ << std::endl;
-	std::cout << "Number of possible actions: " << actArrSize_ << std::endl;
-	
-	if(field == "all" || field == "states")
-	{
-		std::cout << "All possible states: [";
-		for (int i=0; i<(voxArrSize_-1); i++)
-			std::cout << voxArr_[i] << ", ";
-			
-		std::cout << voxArr_[voxArrSize_-1] << "]" << std::endl;
-		std::cout << "Transition Model: " << std::endl;
-		for (int i=0; i<voxArrSize_; i++)
-		{
-			for (int j=0; j<voxArrSize_; j++)
-				std::cout << voxTransModel_[i].probabilities()[j] << "\t";
-			std::cout << std::endl << std::endl;
-		}
-	}
-
-	if(field == "all" || field == "observations")
-	{
-		std::cout << "Number of Voxel Points: [";
-		for (int i=0; i<(voxArrSize_-1); i++)
-			std::cout << ptsVox_[i] << ", ";
-
-		std::cout << ptsVox_[voxArrSize_-1] << "]" << std::endl;
-	}
-	
-	if(field == "all" || field == "beliefs")
-	{
-		std::cout << "Belief Vector: [";
-		for (int i=0; i<(voxArrSize_-1); i++)
-			std::cout << voxBeliefDistr_.probabilities()[i] << ", ";
-		std::cout << voxBeliefDistr_.probabilities()[voxArrSize_-1] << "]" << std::endl;
-	}
-	
-	if(field == "all" || field == "rewards")
-	{
-		std::cout << "Reward Model: " << std::endl;
-		for (int i=0; i<voxArrSize_; i++)
-		{
-			std::cout << point2_to_point3(voxArr_[i]) << "==>" << apply_action(i, 0, lookaheadT_) << std::endl;
-			
-			for (int j=0; j<actArrSize_; j++)
-				std::cout << rewMat_(i, j) << "\t";
-			std::cout << std::endl << std::endl;
-		}
-	}
-	
-	if(field == "all" || field == "actions")
-	{
-		std::cout << "Possible actions" << std::endl;
-		for (int i=0; i<actArrSize_; i++)
-			std::cout << i << "==> [" << actArr_[i][0] << ", " << actArr_[i][1] << ", " << actArr_[i][2] << "]" << std::endl;
-	}
-	
-	if(field == "all" || field == "alphas")
-	{
-		std::cout << "Alpha Vectors" << std::endl;
-		for (int i=0; i<voxArrSize_; i++)
-		{
-			for (int j=0; j<actArrSize_; j++)
-				std::cout << alphaMat_(i, j) << "\t";
-			std::cout << std::endl << std::endl;
-		}
-	}
-	std::cout << std::endl << std::endl;
-};
 
 // *******************************************************************

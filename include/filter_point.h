@@ -4,6 +4,8 @@
 #include <random>
 #include <chrono>
 #include <algorithm>
+#include <iostream>
+#include <string>
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud2.h"
 #include "pcl/PCLPointCloud2.h"
@@ -106,6 +108,11 @@ private:
 	
 	float lookaheadT_;
 	float deltaT_;
+	
+	// File IO
+	std::fstream* fout_;
+	std::string filePath_;
+	bool readFromFile_;
 		
 public:
 	
@@ -145,6 +152,11 @@ public:
 	int update_action();
 	std::discrete_distribution<int> particle_filter(std::discrete_distribution<int>&, 
 																		std::discrete_distribution<int>*, float*, int);
+	bool read_from_file(std::string);
+	bool write_to_file(std::string);
+	bool read_csv(std::string, Eigen::MatrixXd&, int, int);
+	bool read_csv(std::string, std::discrete_distribution<int>*, int, int);
+	bool write_csv(std::string, Eigen::MatrixXd);
 };
 	
 #endif
