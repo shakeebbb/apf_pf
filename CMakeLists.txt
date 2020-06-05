@@ -19,9 +19,14 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
 )
 
-find_package(
-Eigen3 REQUIRED
-)
+find_package(Eigen3 REQUIRED)
+
+find_package(OpenMP REQUIRED)
+if(OPENMP_FOUND)
+  message(STATUS "OPENMP FOUND")
+  set(OpenMP_FLAGS ${OpenMP_CXX_FLAGS})  # or if you use C: ${OpenMP_C_FLAGS}
+  set(OpenMP_LIBS gomp)
+endif()
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -116,7 +121,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES filter_point
 #  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy sensor_msgs std_msgs
-#  DEPENDS system_lib
+  DEPENDS OpenMP
 )
 
 ###########
@@ -142,6 +147,9 @@ include_directories(
 ## either from message generation or dynamic reconfigure
 # add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+target_compile_options(filter_point PRIVATE ${OpenMP_FLAGS})
+add_dependencies(filter_point ${catkin_EXPORTED_TARGETS})
+
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
@@ -159,7 +167,7 @@ include_directories(
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(filter_point ${catkin_LIBRARIES})
+ target_link_libraries(filter_point ${catkin_LIBRARIES} ${OpenMP_LIBS})
  target_link_libraries(filter_point_node ${catkin_LIBRARIES} filter_point)
  target_link_libraries(noise_cloud_node ${catkin_LIBRARIES})
 

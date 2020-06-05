@@ -18,8 +18,10 @@
 		<remap from="filter_point_node/pt_cloud_viz" to="filter_point_node/pt_cloud_viz"/>
 		<remap from="filter_point_node/pt_out" to="filter_point_node/pt_out"/>
 		
-		<param name="read_write" type="bool" value="false"/>
+		<param name="read_from_file" type="bool" value="false"/>
 		<param name="matrices_file_path" type="string" value="$(find local_planning)/configs"/>
+		
+		<param name="n_threads" type="int" value="1"/>
 			
 		<param name="distance_interval" type="double" value="0.1"/>
 		<param name="pixel_interval" type="int" value="50"/>

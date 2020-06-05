@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+#include <omp.h>
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud2.h"
 #include "pcl/PCLPointCloud2.h"
@@ -113,6 +114,9 @@ private:
 	std::fstream* fout_;
 	std::string filePath_;
 	bool readFromFile_;
+	
+	// Parallelization
+	int nThreads_;
 		
 public:
 	

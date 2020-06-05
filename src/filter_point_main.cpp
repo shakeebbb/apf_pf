@@ -62,6 +62,11 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	{
 		read_from_file(filePath_);
 	}
+	
+	if (nThreads_ < 1)
+		omp_set_num_threads(1);
+	else
+		omp_set_num_threads(nThreads_);
 }
 
 // ***************************************************************************
@@ -83,10 +88,12 @@ void filter_point_class::compute_alpha_vectors(int iterations)
 	//std::cout << voxTransModel_[70].probabilities()[90] << "===>" << transMat(70, 90) << std::endl;
 	//std::cout << voxTransModel_[43].probabilities()[5] << "===>" << transMat(43, 5) << std::endl;
 	
+	Eigen::VectorXd optimalAlphas(voxArrSize_);
 	for (int i=0; i<iterations; i++)
 	{
+		optimalAlphas = alphaMat_.rowwise().maxCoeff();
 		for (int j=0; j<actArrSize_; j++)
-			alphaMatMax.col(j) = alphaMat_.rowwise().maxCoeff();
+			alphaMatMax.col(j) = optimalAlphas;
 		alphaMat_ = rewMat_ + 0.95 * transMat * alphaMatMax;
 	}
 }
@@ -235,7 +242,9 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("filter_point_node/base_frame_id", baseFrameId_));
 	
 	while(!nh->getParam("filter_point_node/matrices_file_path", filePath_));
-	while(!nh->getParam("filter_point_node/read_write", readFromFile_));
+	while(!nh->getParam("filter_point_node/read_from_file", readFromFile_));
+	
+	while(!nh->getParam("filter_point_node/n_threads", nThreads_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
@@ -410,7 +419,7 @@ int filter_point_class::update_action()
 	int actIndx;
 	value.maxCoeff(&actIndx);
 	
-	std::cout << value.maxCoeff(&actIndx) << std::endl;
+	//std::cout << value.maxCoeff(&actIndx) << std::endl;
 	return actIndx;
 }
 
@@ -429,6 +438,7 @@ void filter_point_class::update_belief()
 	
 	//std::cout << "Observation Weight: " << "[";
 	
+	#pragma omp parallel for
 	for (int i=0; i<(voxArrSize_-1); i++)
   { 
   	//std::cout << "Maximum Points: " <<  pixInt_ * pixInt_ << std::endl;
@@ -437,8 +447,9 @@ void filter_point_class::update_belief()
   	voxObsWeight[i] = norm_pdf(0, sdevObsv_[0], (pixInt_ * pixInt_) - ptsVox_[i], false);
   	//std::cout << "Voxel Probability: " << voxObsWeight[i] << std::endl;
   	
+  	#pragma omp critical(max_pts_update)
   	if(ptsVox_[i] > maxPts)
-  	maxPts = ptsVox_[i];
+  		maxPts = ptsVox_[i];
   	
   	//std::cout << voxObsWeight[i] << ", ";
   }
@@ -463,6 +474,7 @@ filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefD
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 	std::default_random_engine generator(seed);
 			
+	#pragma omp parallel for
 	for (int i=0; i<nParts; i++)
 	{
 		int sampledState = initBeliefDist(generator);
@@ -477,10 +489,13 @@ filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefD
 	std::discrete_distribution<int> partDistr(partWeight, partWeight+nParts);
 
 	int updatedBelief[initBeliefDist.probabilities().size()] = { 0 };
-			
+	
+	#pragma omp parallel for		
 	for (int i=0; i<nParts; i++)
 	{
 		int sampledPart = partDistr(generator);
+		
+		#pragma omp atomic
 		updatedBelief[partState[sampledPart]]++;
 	}
 	
@@ -494,27 +509,31 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
 	std::fill(ptsVox_, ptsVox_ + voxArrSize_, 0);
 	ptPiv_ = pcl::PointXYZ(0,0,0);
   			
-  int indexVox;
-  float distVox;
   int nValidPts = 0;
   float distVoxPiv = maxDist_;
-  		
+  
+  #pragma omp parallel for		
 	for (int i=0; i<ptCloudPtr->size(); i++)
 	{
 		if(!is_valid(ptCloudPtr->points[i]))
 		continue;
-				
+		
+		#pragma omp atomic		
 		nValidPts++;
+		
+		int indexVox;	float distVox;
   	if(!point_to_voxel(ptCloudPtr->points[i], i, indexVox, distVox))
   	continue;
 
+		#pragma omp atomic
   	ptsVox_[indexVox] ++;
-  				
-  	if(voxArr_[indexVox].z < distVoxPiv)
-  	{
-  		distVoxPiv = voxArr_[indexVox].z;
-  		ptPiv_ = ptCloudPtr->points[i];
-  	}
+  	
+  	#pragma omp critical(piv_pt_update)
+		if(voxArr_[indexVox].z < distVoxPiv)
+		{
+			distVoxPiv = voxArr_[indexVox].z;
+			ptPiv_ = ptCloudPtr->points[i];
+		}
   }
 }
 
