@@ -1,0 +1,34 @@
+read_from_file: false
+
+matrices_file_path: $(find local_planning)/configs/
+
+n_threads: 1
+
+distance_interval: 0.1
+
+pixel_interval: 50
+
+min_distance: 0.15
+
+max_distance: 1.2
+
+n_particles_vox: 10000
+
+outliers_per_voxel: 20
+
+trans_noise_sdev: [8, 0.4] # voxels, distance
+obsv_noise_sdev: [200, 10] # confidence points, nOutliers
+
+max_action_values: [0.0, 0.4, 0.4] 
+min_action_values: [-0.4, -0.4, -0.4]
+action_intervals: [0.1, 0.1, 0.1]
+
+reward_Q: [0.7, 0.7, 0.7]
+repulsive_potential_max_distance: 1.2
+repulsive_potential_gain: 2
+
+alpha_vector_iterations: 10
+
+lookahead_time: 0.5
+sampling_time: 0.1
+base_frame_id: base_link

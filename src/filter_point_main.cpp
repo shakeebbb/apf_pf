@@ -6,10 +6,10 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	// ROS Stuff
 	wait_for_params(nh);
 	
-	ptCloudSub_ = nh->subscribe("filter_point_node/pt_cloud_in", 1, &filter_point_class::pt_cloud_cb, this);
-	camInfoSub_ = nh->subscribe("filter_point_node/cam_info_in", 1, &filter_point_class::cam_info_cb, this);
-	twistSub_ = nh->subscribe("filter_point_node/twist_in", 1, &filter_point_class::twist_cb, this);
-	imuSub_ = nh->subscribe("filter_point_node/imu_in", 1, &filter_point_class::imu_cb, this);
+	ptCloudSub_ = nh->subscribe("pt_cloud_in", 1, &filter_point_class::pt_cloud_cb, this);
+	camInfoSub_ = nh->subscribe("cam_info_in", 1, &filter_point_class::cam_info_cb, this);
+	twistSub_ = nh->subscribe("twist_in", 1, &filter_point_class::twist_cb, this);
+	imuSub_ = nh->subscribe("imu_in", 1, &filter_point_class::imu_cb, this);
 	
 	isInitialized_ = 0x00;
 	
@@ -17,10 +17,10 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	while( (isInitialized_ & 0x03) != 0x03 )
 	ros::spinOnce();
 	
-	vizPub_ = nh->advertise<visualization_msgs::MarkerArray>("filter_point_node/viz_out", 100);
-	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_out", 100);
-	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("filter_point_node/pt_piv_out", 100);
-	actPub_ = nh->advertise<geometry_msgs::TwistStamped>("filter_point_node/twist_out", 100);
+	vizPub_ = nh->advertise<visualization_msgs::MarkerArray>("viz_out", 100);
+	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_out", 100);
+	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_piv_out", 100);
+	actPub_ = nh->advertise<geometry_msgs::TwistStamped>("twist_out", 100);
 	
 	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	
@@ -56,7 +56,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 		compute_alpha_vectors(alphaItr_);
 		
 		if (!write_to_file(filePath_))
-			ROS_WARN("File write unsuccesful");
+			ROS_WARN("File write unsuccesful: File path -> %s", filePath_.c_str());
 	}
 	else
 	{
@@ -216,35 +216,35 @@ filter_point_class::~filter_point_class()
 // ***************************************************************************
 void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 {
-	while(!nh->getParam("filter_point_node/distance_interval", distInt_));
-	while(!nh->getParam("filter_point_node/pixel_interval", pixInt_));
-	while(!nh->getParam("filter_point_node/min_distance", minDist_));
-	while(!nh->getParam("filter_point_node/max_distance", maxDist_));
+	while(!nh->getParam("distance_interval", distInt_));
+	while(!nh->getParam("pixel_interval", pixInt_));
+	while(!nh->getParam("min_distance", minDist_));
+	while(!nh->getParam("max_distance", maxDist_));
 	
-	while(!nh->getParam("filter_point_node/n_particles_vox", voxPartArrSize_));
-	while(!nh->getParam("filter_point_node/outliers_per_voxel", nOutliers_));
+	while(!nh->getParam("n_particles_vox", voxPartArrSize_));
+	while(!nh->getParam("outliers_per_voxel", nOutliers_));
 	
-	while(!nh->getParam("filter_point_node/trans_noise_sdev", sdevTrans_));
-	while(!nh->getParam("filter_point_node/obsv_noise_sdev", sdevObsv_));
+	while(!nh->getParam("trans_noise_sdev", sdevTrans_));
+	while(!nh->getParam("obsv_noise_sdev", sdevObsv_));
 	
-	while(!nh->getParam("filter_point_node/min_action_values", minAct_));
-	while(!nh->getParam("filter_point_node/max_action_values", maxAct_));
-	while(!nh->getParam("filter_point_node/action_intervals", actInt_));
+	while(!nh->getParam("min_action_values", minAct_));
+	while(!nh->getParam("max_action_values", maxAct_));
+	while(!nh->getParam("action_intervals", actInt_));
 	
-	while(!nh->getParam("filter_point_node/reward_Q", rewQ_));
-	while(!nh->getParam("filter_point_node/repulsive_potential_max_distance", repPotMaxDist_));
-	while(!nh->getParam("filter_point_node/repulsive_potential_gain", repPotGain_));
+	while(!nh->getParam("reward_Q", rewQ_));
+	while(!nh->getParam("repulsive_potential_max_distance", repPotMaxDist_));
+	while(!nh->getParam("repulsive_potential_gain", repPotGain_));
 	
-	while(!nh->getParam("filter_point_node/alpha_vector_iterations", alphaItr_));
+	while(!nh->getParam("alpha_vector_iterations", alphaItr_));
 	
-	while(!nh->getParam("filter_point_node/lookahead_time", lookaheadT_));
-	while(!nh->getParam("filter_point_node/sampling_time", deltaT_));
-	while(!nh->getParam("filter_point_node/base_frame_id", baseFrameId_));
+	while(!nh->getParam("lookahead_time", lookaheadT_));
+	while(!nh->getParam("sampling_time", deltaT_));
+	while(!nh->getParam("base_frame_id", baseFrameId_));
 	
-	while(!nh->getParam("filter_point_node/matrices_file_path", filePath_));
-	while(!nh->getParam("filter_point_node/read_from_file", readFromFile_));
+	while(!nh->getParam("matrices_file_path", filePath_));
+	while(!nh->getParam("read_from_file", readFromFile_));
 	
-	while(!nh->getParam("filter_point_node/n_threads", nThreads_));
+	while(!nh->getParam("n_threads", nThreads_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
