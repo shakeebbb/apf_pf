@@ -8,8 +8,8 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	
 	ptCloudSub_ = nh->subscribe("pt_cloud_in", 1, &filter_point_class::pt_cloud_cb, this);
 	camInfoSub_ = nh->subscribe("cam_info_in", 1, &filter_point_class::cam_info_cb, this);
-	twistSub_ = nh->subscribe("twist_in", 1, &filter_point_class::twist_cb, this);
-	imuSub_ = nh->subscribe("imu_in", 1, &filter_point_class::imu_cb, this);
+	//twistSub_ = nh->subscribe("twist_in", 1, &filter_point_class::twist_cb, this);
+	//imuSub_ = nh->subscribe("imu_in", 1, &filter_point_class::imu_cb, this);
 	
 	isInitialized_ = 0x00;
 	
@@ -20,7 +20,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	vizPub_ = nh->advertise<visualization_msgs::MarkerArray>("viz_out", 100);
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_out", 100);
 	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_piv_out", 100);
-	actPub_ = nh->advertise<geometry_msgs::TwistStamped>("twist_out", 100);
+	actPub_ = nh->advertise<geometry_msgs::Vector3Stamped>("twist_out", 100);
 	
 	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	

@@ -1,26 +1,32 @@
 <launch>
 
+	<arg name="mav_name" default="$(env ROS_NAMESPACE)" /> 
+	<arg name="fore_cam_name" default="vi_sensor"/>
+	
 	<arg name="launch_filter_point" default="true"/>
 	<arg name="launch_noise_cloud" default="false"/>
 	
-	<arg name="launch_goal_to_vel" default="false"/>
-	<arg name="publish_dummy_transforms" default="true"/>
+	<arg name="launch_goal_to_vel" default="true"/>
+	<arg name="publish_dummy_transforms" default="false"/>
 	
-	<arg name="imu_frame" value="imu_link"/>
-	<arg name="base_frame" value="base_link"/>
+	<arg name="imu_frame" value="$(arg mav_name)/imu_link"/>
+	<arg name="base_frame" value="$(arg mav_name)/base_link"/>
+	<arg name="world_frame" value="world"/>
 
 	<!-- .................................................... -->
-	
-	<node ns="iris" if="$(arg launch_filter_point)" name="filter_point_node" pkg="local_planning" type="filter_point_node" output="screen">
-		
-		<remap from="filter_point_node/pt_cloud_in" to="vi_sensor/camera_depth/depth/points"/>
-		<remap from="filter_point_node/cam_info_in" to="vi_sensor/camera_depth/depth/camera_info"/>
-		<remap from="filter_point_node/pt_cloud_viz" to="filter_point_node/pt_cloud_viz"/>
-		<remap from="filter_point_node/pt_out" to="filter_point_node/pt_out"/>
-		
+	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point)" name="filter_point" pkg="local_planning" type="filter_point_node" output="log">
+			
+		<remap from="filter_point/pt_cloud_in" to="camera_depth/depth/points"/>
+		<remap from="filter_point/cam_info_in" to="camera_depth/depth/camera_info"/>
+			
+		<remap from="filter_point/viz_out" to="filter_point/viz_out"/>
+		<remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
+		<remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
+		<remap from="filter_point/twist_out" to="filter_point/rep_vel_vec"/>
+			
 		<rosparam command="load" file="$(find local_planning)/configs/fore_cam_fp.yaml" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
-			
+				
 	</node>
 
 	<!-- .................................................... -->
@@ -33,22 +39,22 @@
 
 	<!-- .................................................... -->
 
-	<node if="$(arg launch_goal_to_vel)" name="goal_to_vel_node" pkg="drone_pose" type="goal_to_vel_node" output="screen">
-		<param name="publish_rate" value="10"/>
-		<param name="max_yaw" value="1.00"/>
-		<param name="merge_output_vectors" value="true"/>
+	<node if="$(arg launch_goal_to_vel)" name="filter_point_control" pkg="local_planning" type="goal_to_vel_node" output="screen">
+		<rosparam param="att_vel"> [0.4, 0.4, 1.00] </rosparam>
+
+		<param name="rep_vec_timeout_secs" value="1.0"/>
+		<param name="process_rate_secs" value="0.1"/>
+		<param name="success_radius" value="0.35"/>
 		<param name="holonomic" value="false"/>
 		<param name="yaw_err_bound_nonzero_fore_vel_in_rad" value="1.57"/>
-		<param name="base_frame_id" value="$(arg base_frame)"/>
-		<param name="imuFrameId_" value="$(arg imu_frame)"/>
+		<param name="pose_frame_id" value="$(arg world_frame)"/>
 			
-		<remap from="goal_to_vel_node/imu_in" to="goal_to_vel_node/imu_in"/>
+		<remap from="filter_point_control/pose_in" to="/A01/mavros/local_position/pose"/>
 			
-		<remap from="goal_to_vel_node/goal_pt_in" to="goal_to_vel_node/goal_pt_in"/>	
-		<remap from="goal_to_vel_node/rep_vel_in" to="goal_to_vel_node/rep_vel_in"/>
+		<remap from="filter_point_control/goal_pt_in" to="/clicked_point"/>	
+		<remap from="filter_point_control/rep_vec_in" to="$(arg fore_cam_name)/filter_point/rep_vel_vec"/>
 
-		<remap from="goal_to_vel_node/att_vel_out" to="goal_to_vel_node/att_vel_out"/>
-		<remap from="goal_to_vel_node/rep_vel_out" to="goal_to_vel_node/rep_vel_out"/>
+		<remap from="filter_point_control/twist_out" to="/iris/drone_pose/twist_set_in"/>
 	</node>
 
 	<!-- .................................................... -->

@@ -277,33 +277,16 @@ bool filter_point_class::is_valid(const pcl::PointXYZ& point)
 }
 
 // ***************************************************************************
-void filter_point_class::publish_action(int actIndx, bool isHolonomic)
+void filter_point_class::publish_action(int actIndx)
 {
-	geometry_msgs::TwistStamped actMsg;
+	geometry_msgs::Vector3Stamped actMsg;
 	
 	actMsg.header.stamp = ros::Time::now();
 	actMsg.header.frame_id = baseFrameId_;
-	
-	if (isHolonomic)
-	{
-		actMsg.twist.linear.x = actArr_[actIndx][0];
-		actMsg.twist.linear.y = actArr_[actIndx][1];
-		actMsg.twist.linear.z = actArr_[actIndx][2];
-		
-		actMsg.twist.angular.x = 0;
-		actMsg.twist.angular.y = actIndx;
-		actMsg.twist.angular.z = 0;
-	}
-	else
-	{
-		actMsg.twist.linear.x = actArr_[actIndx][0];
-		actMsg.twist.linear.y = 0;
-		actMsg.twist.linear.z = actArr_[actIndx][1];
-		
-		actMsg.twist.angular.x = 0;
-		actMsg.twist.angular.y = actIndx;
-		actMsg.twist.angular.z = actArr_[actIndx][2];
-	}
+
+	actMsg.vector.x = actArr_[actIndx][0];
+	actMsg.vector.y = actArr_[actIndx][1];
+	actMsg.vector.z = actArr_[actIndx][2];
 	
 	actPub_.publish(actMsg);
 	

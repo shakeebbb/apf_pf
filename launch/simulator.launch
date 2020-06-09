@@ -4,7 +4,7 @@
   	<arg name="mav_name" value="iris"/>
   </include>
   
-  <include file="$(find drone_pose)/launch/complete.launch"/>
+  <!-- include file="$(find drone_pose)/launch/complete.launch"/ -->
   
   <!--node pkg="ros_conversions" name="keyboard_to_joy" type="keyboard_to_joy" output="screen">
 		<remap from="/keyboard_to_joy/joy_out" to="/joy"/>
@@ -19,6 +19,6 @@
 		<remap from="pose_to_posestamped/pose_out" to="pose_to_posestamped/pose_out"/>
 		<remap from="pose_to_posestamped/posestamped_out" to="/A01/mavros/local_position/pose"/>
 			
-		<param name="frame_id" value="odom"/>
+		<param name="frame_id" value="world"/>
 	</node>
 </launch>

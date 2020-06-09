@@ -145,7 +145,7 @@ public:
 	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, float&);
 	bool is_valid(const pcl::PointXYZ&);
 	void publish_viz(std::string = "all", int = 0);
-	void publish_action(int, bool = true);
+	void publish_action(int);
 	void display(std::string, int);
 	float norm_pdf(float, float, float, bool = true);
 	void discretize_image();
