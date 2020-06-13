@@ -62,23 +62,23 @@ private:
 	int imgHeight_;
 	int pixInt_;
 		
-	float minDist_;
-	float maxDist_;
-	float distInt_;
+	double minDist_;
+	double maxDist_;
+	double distInt_;
 		
 	std::discrete_distribution<int>* voxTransModel_;
 	
-	std::vector<float> sdevTrans_; // sdevVox
-	std::vector<float> sdevObsv_; // sdevNPts, sdevDist
+	std::vector<double> sdevTrans_; // sdevVox
+	std::vector<double> sdevObsv_; // sdevNPts, sdevDist
 	
 	tf2::Quaternion imuOrient_;
 	
 	// Actions
-	float** actArr_;
+	double** actArr_;
 	int actArrSize_;
-	std::vector<float> minAct_; // x, y, yaw
-	std::vector<float> maxAct_;
-	std::vector<float> actInt_;
+	std::vector<double> minAct_; // x, y, yaw
+	std::vector<double> maxAct_;
+	std::vector<double> actInt_;
 		
 	// Distributions
 	std::discrete_distribution<int> voxBeliefDistr_;
@@ -89,9 +89,9 @@ private:
 	
 	int alphaItr_;
 	
-	std::vector<float> rewQ_;
-	float repPotMaxDist_;
-	float repPotGain_;
+	std::vector<double> rewQ_;
+	double repPotMaxDist_;
+	double repPotGain_;
 		
 	// Observations, Features
 	int* ptsVox_;
@@ -102,13 +102,13 @@ private:
 	
 	int voxPartArrSize_;
 	
-	float camInfoP_[9];
+	double camInfoP_[9];
 		
 	// Filter Status
 	uint8_t isInitialized_;
 	
-	float lookaheadT_;
-	float deltaT_;
+	double lookaheadT_;
+	double deltaT_;
 	
 	// File IO
 	std::fstream* fout_;
@@ -131,31 +131,31 @@ public:
 	void imu_cb(const sensor_msgs::Imu::ConstPtr&);
 	
 	// *******************************************************************
-	pcl::PointXYZ apply_action(int, int, float, bool = true);
+	pcl::PointXYZ apply_action(int, int, double, bool = true);
 	int point2_to_voxel(pcl::PointXYZ);
 	pcl::PointXYZ point2_to_point3(pcl::PointXYZ, bool = true);
 	pcl::PointXYZ indx_to_vox(int);
-	float man_dist_vox(int, int);
-	float man_dist_to_bound(int);
+	double man_dist_vox(int, int);
+	double man_dist_to_bound(int);
 	void wait_for_params(ros::NodeHandle*);
 	void populate_transition_model();
 	void update_belief();
-	static int random_index(float*, int&);
+	static int random_index(double*, int&);
 	void extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&);
-	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, float&);
+	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, double&);
 	bool is_valid(const pcl::PointXYZ&);
 	void publish_viz(std::string = "all", int = 0);
 	void publish_action(int);
 	void display(std::string, int);
-	float norm_pdf(float, float, float, bool = true);
+	double norm_pdf(double, double, double, bool = true);
 	void discretize_image();
 	void populate_reward_model();
-	float repulsive_potential(pcl::PointXYZ);
+	double repulsive_potential(pcl::PointXYZ);
 	void discretize_actions();
 	void compute_alpha_vectors(int);
 	int update_action();
 	std::discrete_distribution<int> particle_filter(std::discrete_distribution<int>&, 
-																		std::discrete_distribution<int>*, float*, int);
+																		std::discrete_distribution<int>*, double*, int);
 	bool read_from_file(std::string);
 	bool write_to_file(std::string);
 	bool read_csv(std::string, Eigen::MatrixXd&, int, int);

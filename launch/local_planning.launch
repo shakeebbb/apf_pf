@@ -6,7 +6,7 @@
 	<arg name="launch_filter_point" default="true"/>
 	<arg name="launch_noise_cloud" default="false"/>
 	
-	<arg name="launch_goal_to_vel" default="true"/>
+	<arg name="launch_goal_to_vel" default="false"/>
 	<arg name="publish_dummy_transforms" default="false"/>
 	
 	<arg name="imu_frame" value="$(arg mav_name)/imu_link"/>
@@ -14,9 +14,9 @@
 	<arg name="world_frame" value="world"/>
 
 	<!-- .................................................... -->
-	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point)" name="filter_point" pkg="local_planning" type="filter_point_node" output="log">
+	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point)" name="filter_point" pkg="local_planning" type="filter_point_node" output="screen">
 			
-		<remap from="filter_point/pt_cloud_in" to="camera_depth/depth/points"/>
+		<remap from="filter_point/pt_cloud_in" to="camera_depth/depth/points_throttle"/>
 		<remap from="filter_point/cam_info_in" to="camera_depth/depth/camera_info"/>
 			
 		<remap from="filter_point/viz_out" to="filter_point/viz_out"/>

@@ -126,8 +126,8 @@ void filter_point_class::populate_reward_model()
 // ***************************************************************************
 void filter_point_class::discretize_image()
 {
-	voxGridWidth_ = ceil(float(imgWidth_)/float(pixInt_));
-	voxGridHeight_ = ceil(float(imgHeight_)/float(pixInt_));
+	voxGridWidth_ = ceil(double(imgWidth_)/double(pixInt_));
+	voxGridHeight_ = ceil(double(imgHeight_)/double(pixInt_));
 	voxGridDepth_ = floor( (maxDist_ - minDist_)/distInt_ + 1);
 	
 	voxArrSize_ = voxGridWidth_*voxGridHeight_*voxGridDepth_ + 1;
@@ -160,7 +160,7 @@ void filter_point_class::discretize_actions()
 	//std::cout << actInt_[0] << ", " << actInt_[1] << ", " << actInt_[2] << std::endl;
 	//std::cout << "nActions: " << actArrSize_ << std::endl;
 	
-	actArr_ = new float*[actArrSize_];
+	actArr_ = new double*[actArrSize_];
 	int count = 0;
 	for (int i=0; i<horzVelSize; i++)
 	{
@@ -171,7 +171,7 @@ void filter_point_class::discretize_actions()
 				//std::cout << k << "==>" << k+actInt_[2] <<  "==>" << ((k+actInt_[2]) > 6.28) << std::endl;
 				//getchar();
 				
-				actArr_[count] = new float[3];
+				actArr_[count] = new double[3];
 				actArr_[count][0] = minAct_[0] + i*actInt_[0];
 				actArr_[count][1] = minAct_[1] + j*actInt_[1];
 				actArr_[count][2] = minAct_[2] + k*actInt_[2];
@@ -193,7 +193,7 @@ void filter_point_class::discretize_actions()
 	}
 	else
 	{
-		actArr_[actArrSize_-1] = new float[3];
+		actArr_[actArrSize_-1] = new double[3];
 		actArr_[actArrSize_-1][0] = 0;
 		actArr_[actArrSize_-1][1] = 0;
 		actArr_[actArrSize_-1][2] = 0;
@@ -321,7 +321,7 @@ void filter_point_class::imu_cb(const sensor_msgs::Imu::ConstPtr& msgPtr)
 }
 
 // ***************************************************************************
-pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, float deltaT, bool isHolonomic)
+pcl::PointXYZ filter_point_class::apply_action(int indxVoxIn, int indxAct, double deltaT, bool isHolonomic)
 {
 	if(indxVoxIn == (voxArrSize_ - 1))
 	return point2_to_point3(voxArr_[indxVoxIn], true);
@@ -397,7 +397,7 @@ void filter_point_class::populate_transition_model()
 	
 	for (int i=0; i<voxArrSize_; i++)
 	{
-		float transWeights[voxArrSize_];
+		double transWeights[voxArrSize_];
 			
 		for (int j=0; j<voxArrSize_; j++)
 		transWeights[j] = norm_pdf( 0, sdevTrans_[0], man_dist_vox(i, j), false) *
@@ -431,7 +431,7 @@ void filter_point_class::update_belief()
 	//mt19937 generator;
 	//generator.seed(seed);
 	
-	float voxObsWeight[voxArrSize_];
+	double voxObsWeight[voxArrSize_];
 	int maxPts = 0;
 	
 	//voxObsWeight[voxArrSize_-1] = 1;
@@ -466,9 +466,9 @@ void filter_point_class::update_belief()
 std::discrete_distribution<int> 
 filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefDist, 
 																		std::discrete_distribution<int>* transModel,
-																		float *obsWeight, int nParts)
+																		double *obsWeight, int nParts)
 {		
-	float partWeight[nParts];
+	double partWeight[nParts];
 	int partState[nParts];
 	
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -510,7 +510,7 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
 	ptPiv_ = pcl::PointXYZ(0,0,0);
   			
   int nValidPts = 0;
-  float distVoxPiv = maxDist_;
+  double distVoxPiv = maxDist_;
   
   #pragma omp parallel for		
 	for (int i=0; i<ptCloudPtr->size(); i++)
@@ -521,7 +521,7 @@ void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::
 		#pragma omp atomic		
 		nValidPts++;
 		
-		int indexVox;	float distVox;
+		int indexVox;	double distVox;
   	if(!point_to_voxel(ptCloudPtr->points[i], i, indexVox, distVox))
   	continue;
 

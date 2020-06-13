@@ -96,9 +96,9 @@ bool filter_point_class::write_csv(std::string file, Eigen::MatrixXd matIn)
 }
 
 // ***************************************************************************
-float filter_point_class::repulsive_potential(pcl::PointXYZ x_xobs)
+double filter_point_class::repulsive_potential(pcl::PointXYZ x_xobs)
 {
-	float dist = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), x_xobs);
+	double dist = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), x_xobs);
 	
 	if (dist >= repPotMaxDist_)
 	return 0;
@@ -142,8 +142,8 @@ int filter_point_class::point2_to_voxel(pcl::PointXYZ pointIn)
 {
 	pcl::PointXYZ pointOut;
 	
-	int xIndx = floor(float(pointIn.x) / float(pixInt_));
-	int yIndx = floor(float(pointIn.y) / float(pixInt_));
+	int xIndx = floor(double(pointIn.x) / double(pixInt_));
+	int yIndx = floor(double(pointIn.y) / double(pixInt_));
 	int zIndx = floor((pointIn.z - minDist_) / distInt_);
 	
 	return xIndx + voxGridWidth_*(yIndx + voxGridHeight_*zIndx);
@@ -154,10 +154,10 @@ pcl::PointXYZ filter_point_class::point2_to_point3(pcl::PointXYZ pointIn, bool d
 {
 	pcl::PointXYZ pointOut;
 	
-	float fx = camInfoP_[0];
-	float cx = camInfoP_[2];
-	float fy = camInfoP_[5];
-	float cy = camInfoP_[6];
+	double fx = camInfoP_[0];
+	double cx = camInfoP_[2];
+	double fy = camInfoP_[5];
+	double cy = camInfoP_[6];
 	
 	//std::cout << "Camera intrinsics: " << fx << ", " << cx << ", " << fy << ", " << cy << std::endl;
 		
@@ -178,7 +178,7 @@ pcl::PointXYZ filter_point_class::point2_to_point3(pcl::PointXYZ pointIn, bool d
 }
 
 // ***************************************************************************
-float filter_point_class::man_dist_vox(int indxVox1, int indxVox2)
+double filter_point_class::man_dist_vox(int indxVox1, int indxVox2)
 {
 	if( indxVox1 == (voxArrSize_ - 1) )
 	return man_dist_to_bound(indxVox2);
@@ -192,9 +192,9 @@ float filter_point_class::man_dist_vox(int indxVox1, int indxVox2)
 }
 
 // ***************************************************************************
-float filter_point_class::man_dist_to_bound(int indxVox)
+double filter_point_class::man_dist_to_bound(int indxVox)
 {	
-	float dist[5];
+	double dist[5];
 	
 	// right, left, front, upper, lower
 	
@@ -212,18 +212,18 @@ pcl::PointXYZ filter_point_class::indx_to_vox(int indxVox)
 {
 	pcl::PointXYZ outVox;
 	
-	outVox.z = floor(float(indxVox) / float(voxGridWidth_*voxGridHeight_));
-	outVox.y = floor(float(indxVox - outVox.z*voxGridWidth_*voxGridHeight_) / float(voxGridWidth_));
+	outVox.z = floor(double(indxVox) / double(voxGridWidth_*voxGridHeight_));
+	outVox.y = floor(double(indxVox - outVox.z*voxGridWidth_*voxGridHeight_) / double(voxGridWidth_));
 	outVox.x = indxVox - outVox.z*voxGridWidth_*voxGridHeight_ - outVox.y*voxGridWidth_;
 	
 	return outVox;
 }
 
 // ***************************************************************************
-float filter_point_class::norm_pdf(float mean, float sdev, float xIn, bool isFull)
+double filter_point_class::norm_pdf(double mean, double sdev, double xIn, bool isFull)
 {
-    static const float inv_sqrt_2pi = 0.3989422804014327;
-    float a = (xIn - mean) / sdev;
+    static const double inv_sqrt_2pi = 0.3989422804014327;
+    double a = (xIn - mean) / sdev;
     
     //if( isFull || (xIn == mean) ) 
     if(isFull)
@@ -234,7 +234,7 @@ float filter_point_class::norm_pdf(float mean, float sdev, float xIn, bool isFul
 
 
 // ***************************************************************************
-int filter_point_class::random_index(float* belief, int& size)
+int filter_point_class::random_index(double* belief, int& size)
 {
 	std::discrete_distribution<int> distObject(belief, belief+size);
 	std::cout << "Probabilities: " << "[ ";
@@ -251,7 +251,7 @@ int filter_point_class::random_index(float* belief, int& size)
 } 
 		
 // ***************************************************************************
-bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, int& indexVox, float& distVox)
+bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, int& indexVox, double& distVox)
 {
 	//distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
 	
@@ -261,8 +261,8 @@ bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, i
 	return false;
 	
 	//std::cout << "Detected valid points at distance: " << distVox << std::endl;
-	int indexVoxX = floor(float(indexPt % imgWidth_) / float(pixInt_));
-	int indexVoxY = floor(floor(float(indexPt)/float(imgWidth_)) / float(pixInt_));
+	int indexVoxX = floor(double(indexPt % imgWidth_) / double(pixInt_));
+	int indexVoxY = floor(floor(double(indexPt)/double(imgWidth_)) / double(pixInt_));
 	int indexVoxZ = floor((distVox - minDist_) /  distInt_);
 			
 	indexVox = indexVoxX + voxGridWidth_*(indexVoxY + voxGridHeight_*indexVoxZ);
@@ -295,7 +295,7 @@ void filter_point_class::publish_action(int actIndx)
 		
 	std::vector<double>::iterator domItr = std::max_element(probVec.begin(), probVec.end());
 	int domIndx = domItr - probVec.begin();
-	float domProb = *domItr;
+	double domProb = *domItr;
 		
 	geometry_msgs::PointStamped ptMsg;
 	ptMsg.header.stamp = ros::Time::now();
@@ -358,7 +358,7 @@ void filter_point_class::publish_viz(std::string field, int actIndx)
 			pt.z = pt3.z;
 			markerMsg.points.push_back(pt);
 			
-			float shade;
+			double shade;
 			if(voxBeliefDistr_.probabilities()[i] == 0)
 			shade = 0;
 			else
