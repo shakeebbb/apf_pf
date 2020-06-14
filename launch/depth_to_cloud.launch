@@ -1,0 +1,8 @@
+<launch>
+	<node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager" output="screen"/>
+	<node ns="top" pkg="nodelet" type="nodelet" name="point_cloud_xyz"
+        	args="standalone depth_image_proc/point_cloud_xyz">
+    		<remap from="camera_info" to="camera_info"/>
+		<remap from="image_rect" to="depth"/>
+  	</node>
+</launch>

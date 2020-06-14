@@ -1,0 +1,112 @@
+<launch>
+
+	<arg name="mav_name" default="$(env ROS_NAMESPACE)" /> 
+	<arg name="fore_cam_name" default="front"/>
+	<arg name="up_cam_name" default="top"/>
+	<arg name="down_cam_name" default="bottom"/>
+	
+	<arg name="launch_filter_point_fore" default="true"/>
+	<arg name="launch_filter_point_up" default="true"/>
+	<arg name="launch_filter_point_down" default="true"/>
+
+	<arg name="launch_noise_cloud" default="false"/>
+	
+	<arg name="launch_filter_point_control" default="false"/>
+
+	<arg name="publish_dummy_transforms" default="false"/>
+	
+	<arg name="imu_frame" value="$(arg mav_name)/imu_link"/>
+	<arg name="base_frame" value="$(arg mav_name)/base_link"/>
+	<arg name="world_frame" value="world"/>
+
+	<!-- .................................................... -->
+	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+			
+		<remap from="filter_point/pt_cloud_in" to="/A01/rgbd_camera/depth/points"/>
+		<remap from="filter_point/cam_info_in" to="camera_info"/>
+			
+		<remap from="filter_point/viz_out" to="filter_point/viz_out"/>
+		<remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
+		<remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
+		<remap from="filter_point/twist_out" to="filter_point/rep_vec_out"/>
+			
+		<rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
+				
+	</node>
+
+	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="relay" pkg="topic_tools" type="relay"
+		args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
+
+	<!-- .................................................... -->
+        <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+
+                <remap from="filter_point/pt_cloud_in" to="/A01/tof_top/depth/points"/>
+                <remap from="filter_point/cam_info_in" to="camera_info"/>
+
+                <remap from="filter_point/viz_out" to="filter_point/viz_out"/>
+                <remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
+                <remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
+                <remap from="filter_point/twist_out" to="filter_point/rep_vec_out"/>
+                <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+                <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
+
+        </node>
+
+	<node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="relay" pkg="topic_tools" type="relay"
+                args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
+
+	<!-- .................................................... -->
+        <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+
+                <remap from="filter_point/pt_cloud_in" to="/A01/tof_bottom/depth/points"/>
+                <remap from="filter_point/cam_info_in" to="camera_info"/>
+
+                <remap from="filter_point/viz_out" to="filter_point/viz_out"/>
+                <remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
+                <remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
+                <remap from="filter_point/twist_out" to="filter_point/rep_vec_out"/>
+
+                <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+                <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
+
+        </node>
+
+	<node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="relay" pkg="topic_tools" type="relay"
+                args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
+
+	<!-- .................................................... -->
+	<node if="$(arg launch_noise_cloud)" name="noise_cloud_node" pkg="apf_pf" type="noise_cloud_node" output="screen">
+		
+		<remap from="noise_cloud_node/pt_cloud_in" to="/royale_camera_driver/point_cloud"/>
+			
+	</node>
+
+	<!-- .................................................... -->
+	<node if="$(arg launch_filter_point_control)" name="filter_point_control" pkg="apf_pf" type="goal_to_vel_node" output="log">
+		<rosparam param="att_vel"> [0.4, 0.4, 1.00] </rosparam>
+
+		<param name="rep_vec_timeout_secs" value="1.0"/>
+		<param name="process_rate_secs" value="0.1"/>
+		<param name="success_radius" value="0.35"/>
+		<param name="holonomic" value="false"/>
+		<param name="yaw_err_bound_nonzero_fore_vel_in_rad" value="1.57"/>
+		<param name="pose_frame_id" value="$(arg world_frame)"/>
+			
+		<remap from="filter_point_control/pose_in" to="pose_topic"/>
+			
+		<remap from="filter_point_control/goal_pt_in" to="/clicked_point"/>	
+		<remap from="filter_point_control/rep_vec_in" to="filter_point_control/rep_vec_in"/>
+
+		<remap from="filter_point_control/twist_out" to="drone_pose/twist_set_in"/>
+	</node>
+
+	<!-- .................................................... -->
+
+	<group if="$(arg publish_dummy_transforms)">
+		<node pkg="tf2_ros" type="static_transform_publisher" name="world2odom" args="0 0 0 0 0 0 iris/vi_sensor/camera_depth_optical_center_link base_link"/>
+
+		<!--node pkg="tf2_ros" type="static_transform_publisher" name="cam2base" args="0 0 0 -1.57 0 -1.57 iris/vi_sensor/camera_depth_optical_center_link base_link " /-->
+	</group>
+	
+</launch>

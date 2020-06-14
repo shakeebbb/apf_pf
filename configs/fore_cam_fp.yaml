@@ -1,6 +1,6 @@
 read_from_file: false
 
-matrices_file_path: $(find local_planning)/configs/
+matrices_file_path: $(find apf_pf)/configs/
 
 n_threads: 1
 
