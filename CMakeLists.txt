@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   pcl_conversions
   tf2_ros
+  cv_bridge
 )
 
 find_package(Eigen3 REQUIRED)

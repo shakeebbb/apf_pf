@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <omp.h>
+#include <cv_bridge/cv_bridge.h>
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud2.h"
 #include "pcl/PCLPointCloud2.h"
@@ -19,11 +20,12 @@
 #include "geometry_msgs/TwistStamped.h"
 #include "geometry_msgs/Vector3Stamped.h"
 #include "sensor_msgs/Imu.h"
+#include "sensor_msgs/Image.h"
 #include "sensor_msgs/CameraInfo.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "tf2/LinearMath/Transform.h"
 #include "tf2_ros/transform_listener.h"
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
 class filter_point_class
 {		
@@ -31,6 +33,7 @@ class filter_point_class
 private:
 
 	// ROS Related
+  ros::Subscriber imgSub_;
 	ros::Subscriber ptCloudSub_;
 	ros::Subscriber camInfoSub_;
 	ros::Subscriber twistSub_;
@@ -103,7 +106,9 @@ private:
 	int voxPartArrSize_;
 	
 	double camInfoP_[9];
-		
+
+  bool inputMode_; // false: pt_cloud, true: depth_img
+	
 	// Filter Status
 	uint8_t isInitialized_;
 	
@@ -125,6 +130,7 @@ public:
 	~filter_point_class();
 
 	// *******************************************************************
+  void img_cb(const sensor_msgs::Image::ConstPtr&);
 	void pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&);
 	void cam_info_cb(const sensor_msgs::CameraInfo::ConstPtr&);
 	void twist_cb(const geometry_msgs::TwistStamped::ConstPtr&);
@@ -132,18 +138,24 @@ public:
 	
 	// *******************************************************************
 	pcl::PointXYZ apply_action(int, int, double, bool = true);
-	int point2_to_voxel(pcl::PointXYZ);
+	int point2_to_voxel_indx(const pcl::PointXYZ&);
 	pcl::PointXYZ point2_to_point3(pcl::PointXYZ, bool = true);
-	pcl::PointXYZ indx_to_vox(int);
 	double man_dist_vox(int, int);
 	double man_dist_to_bound(int);
 	void wait_for_params(ros::NodeHandle*);
 	void populate_transition_model();
 	void update_belief();
 	static int random_index(double*, int&);
-	void extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&);
-	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, double&);
-	bool is_valid(const pcl::PointXYZ&);
+
+  template<typename T> void extract_features(const T&, const int, const int);
+  ///template<typename> void extract_features(const cv_bridge::CvImageConstPtr&, int, int);
+  //template<typename> void extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&, int, int);
+
+  double get_pix_val(const cv_bridge::CvImageConstPtr&, const int, const int);
+  double get_pix_val(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&, const int, const int);
+
+	bool is_valid(const cv_bridge::CvImageConstPtr&, const int, const int);
+  bool is_valid(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&, const int, const int);
 	void publish_viz(std::string = "all", int = 0);
 	void publish_action(int);
 	void display(std::string, int);

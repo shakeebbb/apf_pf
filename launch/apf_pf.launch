@@ -23,13 +23,13 @@
 	<!-- .................................................... -->
 	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
 			
-		<remap from="filter_point/pt_cloud_in" to="depth/points"/>
-		<remap from="filter_point/cam_info_in" to="camera_info"/>
+		<remap from="~/img_in" to="depth"/>
+		<remap from="~/cam_info_in" to="camera_info"/>
 			
-		<remap from="filter_point/viz_out" to="filter_point/viz_out"/>
-		<remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
-		<remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
-		<remap from="filter_point/twist_out" to="filter_point/rep_vec_out"/>
+		<remap from="~/viz_out" to="filter_point/viz_out"/>
+		<remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
+		<remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
+		<remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 			
 		<rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
@@ -40,38 +40,38 @@
 		args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
 
 	<!-- .................................................... -->
-        <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+  <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
 
-                <remap from="filter_point/pt_cloud_in" to="depth/points"/>
-                <remap from="filter_point/cam_info_in" to="camera_info"/>
+    <remap from="~/img_in" to="depth"/>
+    <remap from="~/cam_info_in" to="camera_info"/>
 
-                <remap from="filter_point/viz_out" to="filter_point/viz_out"/>
-                <remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
-                <remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
-                <remap from="filter_point/twist_out" to="filter_point/rep_vec_out"/>
-                <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
-                <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
+    <remap from="~/viz_out" to="filter_point/viz_out"/>
+    <remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
+    <remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
+    <remap from="~/twist_out" to="filter_point/rep_vec_out"/>
+    <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+    <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 
-        </node>
+  </node>
 
 	<node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="relay" pkg="topic_tools" type="relay"
                 args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
 
 	<!-- .................................................... -->
-        <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+  <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
 
-                <remap from="filter_point/pt_cloud_in" to="depth/points"/>
-                <remap from="filter_point/cam_info_in" to="camera_info"/>
+    <remap from="~/img_in" to="depth"/>
+    <remap from="~/cam_info_in" to="camera_info"/>
 
-                <remap from="filter_point/viz_out" to="filter_point/viz_out"/>
-                <remap from="filter_point/pt_out" to="filter_point/closest_point_filtered"/>
-                <remap from="filter_point/pt_piv_out" to="filter_point/closest_point_raw"/>
-                <remap from="filter_point/twist_out" to="filter_point/rep_vec_out"/>
+    <remap from="~/viz_out" to="filter_point/viz_out"/>
+    <remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
+    <remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
+    <remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 
-                <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
-                <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
+    <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+    <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 
-        </node>
+  </node>
 
 	<node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="relay" pkg="topic_tools" type="relay"
                 args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
@@ -79,7 +79,7 @@
 	<!-- .................................................... -->
 	<node if="$(arg launch_noise_cloud)" name="noise_cloud_node" pkg="apf_pf" type="noise_cloud_node" output="screen">
 		
-		<remap from="noise_cloud_node/pt_cloud_in" to="/royale_camera_driver/point_cloud"/>
+		<remap from="~/pt_cloud_in" to="/royale_camera_driver/point_cloud"/>
 			
 	</node>
 
@@ -94,12 +94,12 @@
 		<param name="yaw_err_bound_nonzero_fore_vel_in_rad" value="1.57"/>
 		<param name="pose_frame_id" value="$(arg world_frame)"/>
 			
-		<remap from="filter_point_control/pose_in" to="pose_topic"/>
+		<remap from="~/pose_in" to="pose_topic"/>
 			
-		<remap from="filter_point_control/goal_pt_in" to="/clicked_point"/>	
-		<remap from="filter_point_control/rep_vec_in" to="filter_point_control/rep_vec_in"/>
+		<remap from="~/goal_pt_in" to="/clicked_point"/>	
+		<remap from="~/rep_vec_in" to="filter_point_control/rep_vec_in"/>
 
-		<remap from="filter_point_control/twist_out" to="drone_pose/twist_set_in"/>
+		<remap from="~/twist_out" to="drone_pose/twist_set_in"/>
 	</node>
 
 	<!-- .................................................... -->

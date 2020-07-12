@@ -6,6 +6,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	// ROS Stuff
 	wait_for_params(nh);
 	
+  imgSub_ = nh->subscribe("img_in", 1, &filter_point_class::img_cb, this);
 	ptCloudSub_ = nh->subscribe("pt_cloud_in", 1, &filter_point_class::pt_cloud_cb, this);
 	camInfoSub_ = nh->subscribe("cam_info_in", 1, &filter_point_class::cam_info_cb, this);
 	//twistSub_ = nh->subscribe("twist_in", 1, &filter_point_class::twist_cb, this);
@@ -211,6 +212,11 @@ filter_point_class::~filter_point_class()
 	
 	delete voxArr_;		
 	delete ptsVox_;
+ 
+  delete fout_;
+
+  delete tfListenerPtr_;
+
 }
 
 // ***************************************************************************
@@ -245,13 +251,64 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("read_from_file", readFromFile_));
 	
 	while(!nh->getParam("n_threads", nThreads_));
+
+  while(!nh->getParam("input_mode", inputMode_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
 
 // ***************************************************************************
+void filter_point_class::img_cb(const sensor_msgs::Image::ConstPtr& msgPtr)
+{
+  if (!inputMode_)
+    return;
+
+	ros::Time begin = ros::Time::now();
+	
+	if((isInitialized_ & 0x03) == 0x03)
+	{
+    cv_bridge::CvImageConstPtr cvPtr;
+    try
+    {
+      cvPtr = cv_bridge::toCvShare(msgPtr);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+      ROS_ERROR("cv_bridge exception: %s", e.what());
+      return;
+    }
+		extract_features<cv_bridge::CvImageConstPtr>(cvPtr, imgWidth_, imgHeight_);
+		update_belief();
+		int actIndx = update_action();
+		publish_action(actIndx);
+		publish_viz("all", actIndx);
+		display("beliefs", 3);
+	}
+	
+	if((isInitialized_ & 0x01) != 0x01)
+	{
+		ROS_INFO("Frame Id: %s", msgPtr->header.frame_id.c_str());
+		ROS_INFO("Image Height: %i", msgPtr->height);
+		ROS_INFO("Image Width: %i", msgPtr->width);
+		ROS_INFO("Data Size: %lu", msgPtr->data.size());
+		
+		camFrameId_ = msgPtr->header.frame_id;
+		imgWidth_ = msgPtr->width;
+		imgHeight_ = msgPtr->height;
+		
+		isInitialized_ |= 0x01;
+	}
+	
+	ros::Duration elapsed = ros::Time::now() - begin;
+	ROS_INFO("Time Elapsed: %f", elapsed.toSec());
+}
+
+// ***************************************************************************
 void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& msgPtr)
 {
+  if (inputMode_)
+    return;
+
 	ros::Time begin = ros::Time::now();
 	
 	if(msgPtr->height == 1)
@@ -262,7 +319,7 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 	
 	if((isInitialized_ & 0x03) == 0x03)
 	{
-		extract_features(msgPtr);
+		extract_features<pcl::PointCloud<pcl::PointXYZ>::ConstPtr>(msgPtr, imgWidth_, imgHeight_);
 		update_belief();
 		int actIndx = update_action();
 		publish_action(actIndx);
@@ -503,37 +560,40 @@ filter_point_class::particle_filter(std::discrete_distribution<int>& initBeliefD
 }
 		
 // ***************************************************************************
-void filter_point_class::extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& ptCloudPtr)
+template<typename T>
+void filter_point_class::extract_features(const T& imgPtr, const int imgWidth, const int imgHeight)
 {
 	//std::fill(voxArr_, voxArr_ + voxArrSize_, pcl::PointXYZ(0,0,0));
 	std::fill(ptsVox_, ptsVox_ + voxArrSize_, 0);
 	ptPiv_ = pcl::PointXYZ(0,0,0);
-  			
-  int nValidPts = 0;
+  
   double distVoxPiv = maxDist_;
   
   #pragma omp parallel for		
-	for (int i=0; i<ptCloudPtr->size(); i++)
+	for (int j=0; j<imgHeight; j++)
 	{
-		if(!is_valid(ptCloudPtr->points[i]))
-		continue;
-		
-		#pragma omp atomic		
-		nValidPts++;
-		
-		int indexVox;	double distVox;
-  	if(!point_to_voxel(ptCloudPtr->points[i], i, indexVox, distVox))
-  	continue;
+    for (int i=0; i<imgWidth; i++)
+	  {
+		  if(!is_valid(imgPtr, i, j))
+			continue;
+			
+			double distVox = get_pix_val(imgPtr, i, j);
 
-		#pragma omp atomic
-  	ptsVox_[indexVox] ++;
-  	
-  	#pragma omp critical(piv_pt_update)
-		if(voxArr_[indexVox].z < distVoxPiv)
-		{
-			distVoxPiv = voxArr_[indexVox].z;
-			ptPiv_ = ptCloudPtr->points[i];
-		}
+      if((distVox > maxDist_) || (distVox < minDist_))
+  	   continue;
+
+			int indexVox = point2_to_voxel_indx(pcl::PointXYZ(i, j, distVox));
+
+			#pragma omp atomic
+			ptsVox_[indexVox] ++;
+			
+			#pragma omp critical(piv_pt_update)
+			if(distVox < distVoxPiv)
+			{
+				distVoxPiv = distVox;
+        ptPiv_ = point2_to_point3(pcl::PointXYZ(i, j, distVox));
+			}
+    }
   }
 }
 

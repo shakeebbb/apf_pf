@@ -138,18 +138,6 @@ void filter_point_class::twist_cb(const geometry_msgs::TwistStamped::ConstPtr& m
 }
 
 // ***************************************************************************
-int filter_point_class::point2_to_voxel(pcl::PointXYZ pointIn)
-{
-	pcl::PointXYZ pointOut;
-	
-	int xIndx = floor(double(pointIn.x) / double(pixInt_));
-	int yIndx = floor(double(pointIn.y) / double(pixInt_));
-	int zIndx = floor((pointIn.z - minDist_) / distInt_);
-	
-	return xIndx + voxGridWidth_*(yIndx + voxGridHeight_*zIndx);
-}
-
-// ***************************************************************************
 pcl::PointXYZ filter_point_class::point2_to_point3(pcl::PointXYZ pointIn, bool direction)
 {
 	pcl::PointXYZ pointOut;
@@ -208,17 +196,19 @@ double filter_point_class::man_dist_to_bound(int indxVox)
 }
 
 // ***************************************************************************
-pcl::PointXYZ filter_point_class::indx_to_vox(int indxVox)
+/*
+int* filter_point_class::indx_1d_to_3d(const int indx3d, const int width, const int height)
 {
+  int indx_3d[3];
 	pcl::PointXYZ outVox;
 	
-	outVox.z = floor(double(indxVox) / double(voxGridWidth_*voxGridHeight_));
-	outVox.y = floor(double(indxVox - outVox.z*voxGridWidth_*voxGridHeight_) / double(voxGridWidth_));
-	outVox.x = indxVox - outVox.z*voxGridWidth_*voxGridHeight_ - outVox.y*voxGridWidth_;
+	indx_3d[2] = floor(double(indx3d) / double(width*height));
+	indx_3d[1] = floor(double(indx3d - outVox.z*width*height) / double(width));
+	indx_3d[0] = indx3d - outVox.z*width*height - outVox.y*width;
 	
-	return outVox;
+	return indx_3d;
 }
-
+*/
 // ***************************************************************************
 double filter_point_class::norm_pdf(double mean, double sdev, double xIn, bool isFull)
 {
@@ -249,31 +239,44 @@ int filter_point_class::random_index(double* belief, int& size)
 			
 	return distObject(generator);	
 } 
-		
+
 // ***************************************************************************
-bool filter_point_class::point_to_voxel(const pcl::PointXYZ& pt, int& indexPt, int& indexVox, double& distVox)
-{
-	//distVox = pcl::euclideanDistance (pcl::PointXYZ(0,0,0), pt);
-	
-	distVox = pt.z;
-	
-	if((distVox > maxDist_) || (distVox < minDist_))
-	return false;
-	
+int filter_point_class::point2_to_voxel_indx(const pcl::PointXYZ& ptIn)
+{	
 	//std::cout << "Detected valid points at distance: " << distVox << std::endl;
-	int indexVoxX = floor(double(indexPt % imgWidth_) / double(pixInt_));
-	int indexVoxY = floor(floor(double(indexPt)/double(imgWidth_)) / double(pixInt_));
-	int indexVoxZ = floor((distVox - minDist_) /  distInt_);
+	int indexVoxX = floor(double(ptIn.x) / double(pixInt_));
+	int indexVoxY = floor(double(ptIn.y) / double(pixInt_));
+	int indexVoxZ = floor((ptIn.z - minDist_) /  distInt_);
 			
-	indexVox = indexVoxX + voxGridWidth_*(indexVoxY + voxGridHeight_*indexVoxZ);
+	int indexVox = indexVoxX + voxGridWidth_*(indexVoxY + voxGridHeight_*indexVoxZ);
 			
-	return true;
+	return indexVox;
 }
 		
 // ***************************************************************************
-bool filter_point_class::is_valid(const pcl::PointXYZ& point)
+bool filter_point_class::is_valid(const cv_bridge::CvImageConstPtr& imgPtr, const int indxW, const int indxH)
 {
-	return !(isnan(point.x) || isnan(point.y) || isnan(point.z));
+	return !(isnan(imgPtr->image.at<double>(indxW, indxH)));
+}
+
+// ***************************************************************************
+bool filter_point_class::is_valid(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& imgPtr, const int indxW, const int indxH)
+{
+  int indx = indxW * indxH;
+	return !(isnan(imgPtr->points[indx].x) || isnan(imgPtr->points[indx].y) || isnan(imgPtr->points[indx].z));
+}
+
+// *******************************************************************
+double filter_point_class::get_pix_val(const cv_bridge::CvImageConstPtr& imgPtr, const int indxW, const int indxH)
+{
+	return imgPtr->image.at<double>(indxW, indxH);
+}
+
+// *******************************************************************
+double filter_point_class::get_pix_val(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& imgPtr, const int indxW, const int indxH)
+{
+  int indx = indxW + imgWidth_*indxH;
+	return imgPtr->points[indx].z;
 }
 
 // ***************************************************************************

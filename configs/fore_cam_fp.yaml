@@ -32,3 +32,5 @@ alpha_vector_iterations: 10
 lookahead_time: 0.5
 sampling_time: 0.1
 base_frame_id: base_link
+
+input_mode: true # false: pt_cloud, true: depth_img
