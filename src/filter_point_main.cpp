@@ -270,13 +270,21 @@ void filter_point_class::img_cb(const sensor_msgs::Image::ConstPtr& msgPtr)
     cv_bridge::CvImageConstPtr cvPtr;
     try
     {
-      cvPtr = cv_bridge::toCvShare(msgPtr);
+      cvPtr = cv_bridge::toCvShare(msgPtr, "32FC1");
     }
     catch (cv_bridge::Exception& e)
     {
       ROS_ERROR("cv_bridge exception: %s", e.what());
       return;
     }
+
+    //for (int i = 0; i< 640; i++)
+    // for (int j = 0; j< 480; j++)
+     //  if (cvPtr->image.at<float>(j ,i) > 0.1)
+     //  {
+     //   std::cout << cvPtr->image.at<uint16_t>(j ,i) << std::endl;
+     //   getchar();
+     //  }
 		extract_features<cv_bridge::CvImageConstPtr>(cvPtr, imgWidth_, imgHeight_);
 		update_belief();
 		int actIndx = update_action();
@@ -566,9 +574,9 @@ void filter_point_class::extract_features(const T& imgPtr, const int imgWidth, c
 	//std::fill(voxArr_, voxArr_ + voxArrSize_, pcl::PointXYZ(0,0,0));
 	std::fill(ptsVox_, ptsVox_ + voxArrSize_, 0);
 	ptPiv_ = pcl::PointXYZ(0,0,0);
-  
+
   double distVoxPiv = maxDist_;
-  
+
   #pragma omp parallel for		
 	for (int j=0; j<imgHeight; j++)
 	{
@@ -576,17 +584,20 @@ void filter_point_class::extract_features(const T& imgPtr, const int imgWidth, c
 	  {
 		  if(!is_valid(imgPtr, i, j))
 			continue;
-			
+		
 			double distVox = get_pix_val(imgPtr, i, j);
 
       if((distVox > maxDist_) || (distVox < minDist_))
   	   continue;
 
 			int indexVox = point2_to_voxel_indx(pcl::PointXYZ(i, j, distVox));
+      //std::cout << "Point with distance: " << distVox << std::endl;
+      //std::cout << "Added to voxel indx: " << indexVox << std::endl;
 
+      //getchar();
 			#pragma omp atomic
 			ptsVox_[indexVox] ++;
-			
+
 			#pragma omp critical(piv_pt_update)
 			if(distVox < distVoxPiv)
 			{

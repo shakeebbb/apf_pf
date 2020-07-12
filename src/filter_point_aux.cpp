@@ -256,7 +256,7 @@ int filter_point_class::point2_to_voxel_indx(const pcl::PointXYZ& ptIn)
 // ***************************************************************************
 bool filter_point_class::is_valid(const cv_bridge::CvImageConstPtr& imgPtr, const int indxW, const int indxH)
 {
-	return !(isnan(imgPtr->image.at<double>(indxW, indxH)));
+	return !(isnan(imgPtr->image.at<float>(indxH, indxW)));
 }
 
 // ***************************************************************************
@@ -269,7 +269,7 @@ bool filter_point_class::is_valid(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr
 // *******************************************************************
 double filter_point_class::get_pix_val(const cv_bridge::CvImageConstPtr& imgPtr, const int indxW, const int indxH)
 {
-	return imgPtr->image.at<double>(indxW, indxH);
+	return imgPtr->image.at<float>(indxH, indxW) / 1000;
 }
 
 // *******************************************************************

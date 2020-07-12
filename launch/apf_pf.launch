@@ -6,9 +6,9 @@
 	<arg name="up_cam_name" default="$(env TOF_UP_NAME)"/>
 	<arg name="down_cam_name" default="$(env TOF_DOWN_NAME)"/>
 	
-	<arg name="launch_filter_point_fore" default="true"/>
+	<arg name="launch_filter_point_fore" default="false"/>
 	<arg name="launch_filter_point_up" default="true"/>
-	<arg name="launch_filter_point_down" default="true"/>
+	<arg name="launch_filter_point_down" default="false"/>
 
 	<arg name="launch_noise_cloud" default="false"/>
 	
@@ -21,10 +21,10 @@
 	<arg name="world_frame" value="$(arg mav_name)/odom"/>
 
 	<!-- .................................................... -->
-	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="screen">
 			
-		<remap from="~/img_in" to="depth"/>
-		<remap from="~/cam_info_in" to="camera_info"/>
+		<remap from="~/img_in" to="depth/image_rect_raw"/>
+		<remap from="~/cam_info_in" to="depth/camera_info"/>
 			
 		<remap from="~/viz_out" to="filter_point/viz_out"/>
 		<remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
@@ -40,10 +40,10 @@
 		args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
 
 	<!-- .................................................... -->
-  <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+  <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="screen">
 
-    <remap from="~/img_in" to="depth"/>
-    <remap from="~/cam_info_in" to="camera_info"/>
+    <remap from="~/img_in" to="stream/1/depth"/>
+    <remap from="~/cam_info_in" to="stream/1/camera_info"/>
 
     <remap from="~/viz_out" to="filter_point/viz_out"/>
     <remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
@@ -58,10 +58,10 @@
                 args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
 
 	<!-- .................................................... -->
-  <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="log">
+  <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="screen">
 
-    <remap from="~/img_in" to="depth"/>
-    <remap from="~/cam_info_in" to="camera_info"/>
+    <remap from="~/img_in" to="stream/1/depth"/>
+    <remap from="~/cam_info_in" to="stream/1/camera_info"/>
 
     <remap from="~/viz_out" to="filter_point/viz_out"/>
     <remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
