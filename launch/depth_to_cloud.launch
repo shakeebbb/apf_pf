@@ -1,11 +1,13 @@
 <launch>
-  <arg name="mav_name" default="$(env ROS_NAMESPACE)"/>
-  <arg name="tof_fore_name" default="$(env TOF_FORE_NAME)"/>
+  <arg name="cam_info_topic" default="depth/camera_info"/>
+  <arg name="depth_img_topic" default="depth/image_rect_raw"/>
+  <arg name="pt_cloud_topic" default="depth/points"/>
 
 	<node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager" output="screen"/>
-	<node ns="$(arg tof_fore_name)" pkg="nodelet" type="nodelet" name="depth_to_point_tof_fore" args="standalone depth_image_proc/point_cloud_xyz">
+	<node pkg="nodelet" type="nodelet" name="depth_to_point" args="standalone depth_image_proc/point_cloud_xyz">
 
-    <remap from="camera_info" to="depth/camera_info"/>
-		<remap from="image_rect" to="depth/image_rect_raw"/>
+    <remap from="camera_info" to="$(arg cam_info_topic)"/>
+		<remap from="image_rect" to="$(arg depth_img_topic)"/>
+    <remap from="points" to="$(arg pt_cloud_topic)"/>
   </node>
 </launch>
