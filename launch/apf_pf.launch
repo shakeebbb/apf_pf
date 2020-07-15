@@ -100,7 +100,7 @@
 		<param name="yaw_err_bound_nonzero_fore_vel_in_rad" value="1.57"/>
 		<param name="pose_frame_id" value="$(arg world_frame)"/>
 			
-		<remap from="~/pose_in" to="pose_topic"/>
+		<remap from="~/pose_in" to="cart_pose"/>
 			
 		<remap from="~/goal_pt_in" to="drone_pose/attractor_setpoint_out"/>	
 		<remap from="~/rep_vec_in" to="filter_point_control/rep_vec_in"/>
