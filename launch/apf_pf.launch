@@ -32,7 +32,7 @@
 		<remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
 		<remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 			
-		<rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+		<rosparam command="load" file="$(find apf_pf)/configs/agg_cam_fp.yaml" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 				
 	</node>
@@ -56,7 +56,7 @@
     <remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
     <remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
     <remap from="~/twist_out" to="filter_point/rep_vec_out"/>
-    <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+    <rosparam command="load" file="$(find apf_pf)/configs/cam_fp.yaml" subst_value="true"/>
     <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 
   </node>
@@ -75,7 +75,7 @@
     <remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
     <remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 
-    <rosparam command="load" file="$(find apf_pf)/configs/fore_cam_fp.yaml" subst_value="true"/>
+    <rosparam command="load" file="$(find apf_pf)/configs/cam_fp.yaml" subst_value="true"/>
     <param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 
   </node>
@@ -101,9 +101,9 @@
 		<param name="yaw_err_bound_nonzero_fore_vel_in_rad" value="1.57"/>
 		<param name="pose_frame_id" value="$(arg world_frame)"/>
 			
-		<remap from="~/pose_in" to="cart_pose"/>
+		<remap from="~/pose_in" to="mavros/local_position/pose"/>
 			
-		<remap from="~/goal_pt_in" to="drone_pose/attractor_setpoint_out"/>	
+		<remap from="~/goal_pt_in" to="lookahead_point"/>	
 		<remap from="~/rep_vec_in" to="filter_point_control/rep_vec_in"/>
 
 		<remap from="~/twist_out" to="drone_pose/twist_set_in"/>

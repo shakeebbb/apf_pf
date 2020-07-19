@@ -25,9 +25,9 @@ action_intervals: [0.2, 0.2, 0.2]
 
 reward_Q: [0.7, 0.7, 0.7]
 repulsive_potential_max_distance: 0.8
-repulsive_potential_gain: 2
+repulsive_potential_gain: 3
 
-alpha_vector_iterations: 10
+alpha_vector_iterations: 20
 
 lookahead_time: 0.5
 sampling_time: 0.1
