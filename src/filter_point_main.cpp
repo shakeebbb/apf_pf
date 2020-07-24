@@ -21,6 +21,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_out", 100);
 	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_piv_out", 100);
 	actPub_ = nh->advertise<geometry_msgs::Vector3Stamped>("twist_out", 100);
+  beliefPub_ = nh->advertise<std_msgs::Float64MultiArray>("belief_out", 100);
 	
 	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	

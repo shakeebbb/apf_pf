@@ -9,6 +9,7 @@
 #include <omp.h>
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud2.h"
+#include "std_msgs/Float64MultiArray.h"
 #include "pcl/PCLPointCloud2.h"
 #include "pcl/point_cloud.h"
 #include "pcl_conversions/pcl_conversions.h"
@@ -23,7 +24,7 @@
 #include "visualization_msgs/MarkerArray.h"
 #include "tf2/LinearMath/Transform.h"
 #include "tf2_ros/transform_listener.h"
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
 class filter_point_class
 {		
@@ -40,6 +41,7 @@ private:
 	ros::Publisher ptPub_;
 	ros::Publisher ptPivPub_;
 	ros::Publisher actPub_;
+  ros::Publisher beliefPub_;
 	
 	tf2_ros::Buffer tfBuffer_;
   tf2_ros::TransformListener* tfListenerPtr_;

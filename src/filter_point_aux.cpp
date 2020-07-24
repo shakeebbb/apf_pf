@@ -417,6 +417,21 @@ void filter_point_class::publish_viz(std::string field, int actIndx)
 	
 	if (markerArrMsg.markers.size() > 0)
 	vizPub_.publish(markerArrMsg);
+
+  if (field == "all" || field == "belief")
+  {
+    std_msgs::Float64MultiArray belief;
+
+    std_msgs::MultiArrayDimension dim;
+    dim.label = "length";
+    dim.size = voxBeliefDistr_.probabilities().size();
+    dim.stride = dim.size;
+
+    belief.layout.dim.push_back(dim);
+    belief.data = voxBeliefDistr_.probabilities();
+
+    beliefPub_.publish(belief);
+  }
 }
 		
 // ***************************************************************************
