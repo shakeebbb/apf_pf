@@ -1,0 +1,11 @@
+<launch>
+	<node name="img_marker" pkg="apf_pf" type="img_marker_node" output="screen">
+		<remap from="~/img_in" to="/A01/tof_fore/color/image_raw"/>
+		<remap from="~/belief_in" to="/A01/tof_fore/filter_point/belief_out"/>
+		<remap from="~/cam_info_in" to="/A01/tof_fore/color/camera_info"/>
+    <remap from="~/belief_cam_info_in" to="/A01/tof_fore/depth/camera_info"/>
+
+		<param name="pixel_interval" value="50"/>
+    <param name="distance_interval" value="0.1"/>
+	</node>
+</launch>
