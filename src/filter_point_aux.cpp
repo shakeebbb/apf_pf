@@ -289,8 +289,12 @@ void filter_point_class::publish_action(int actIndx)
 	actMsg.vector.z = actArr_[actIndx][2];
 	
 	actPub_.publish(actMsg);
-	
-	std::vector<double> probVec;
+}
+
+// ***************************************************************************
+void filter_point_class::publish_points()
+{
+  std::vector<double> probVec;
 	probVec = voxBeliefDistr_.probabilities();
 		
 	std::vector<double>::iterator domItr = std::max_element(probVec.begin(), probVec.end());
@@ -318,9 +322,56 @@ void filter_point_class::publish_action(int actIndx)
 
 	ptPivPub_.publish(ptPivMsg);
 }
+
+
+// ***************************************************************************
+void filter_point_class::publish_force(double* repForce)
+{
+  geometry_msgs::Vector3Stamped forceMsg;
+
+  forceMsg.header.stamp = ros::Time::now();
+	forceMsg.header.frame_id = baseFrameId_;
+
+  forceMsg.vector.x = 0; forceMsg.vector.y = 0; forceMsg.vector.z = 0;
+  for(int i=0; i<(voxArrSize_-1); i++)
+  {
+    if(voxBeliefDistr_.probabilities()[i] > 0.0)
+    {
+      geometry_msgs::Vector3 repForceVox = get_rep_force(i, repPotMaxDist_, repPotGain_, voxBeliefDistr_.probabilities()[i]);
+      forceMsg.vector.x += repForceVox.x;
+      forceMsg.vector.y += repForceVox.y;
+      forceMsg.vector.z += repForceVox.z;
+    }
+  }
+
+  tf2::doTransform(forceMsg, forceMsg, camToBaseTransform_);
+  repForce[0] = forceMsg.vector.x;
+  repForce[1] = forceMsg.vector.y;
+  repForce[2] = forceMsg.vector.z;
+
+  forcePub_.publish(forceMsg);
+}
+
+// ***************************************************************************
+geometry_msgs::Vector3 filter_point_class::get_rep_force(int indxVox, double horizon, double gain, double scale)
+{
+  geometry_msgs::Vector3 repVec;
+  
+  pcl::PointXYZ pt3 = point2_to_point3(voxArr_[indxVox], true);
+  double obsDistSq = pow(pt3.x,2) + pow(pt3.y,2) + pow(pt3.z,2);
+  double obsDist = sqrt(obsDistSq);
+
+  double repVecMag = gain * (1/obsDist - 1/horizon) * (1/obsDistSq);
+
+  repVec.x = -pt3.x / obsDist * repVecMag * scale;
+  repVec.y = -pt3.y / obsDist * repVecMag * scale;
+  repVec.z = -pt3.z / obsDist * repVecMag * scale;
+  
+  return repVec;
+}
 		
 // ***************************************************************************
-void filter_point_class::publish_viz(std::string field, int actIndx)
+void filter_point_class::publish_viz(double* repAct, std::string field)
 {
 	visualization_msgs::MarkerArray markerArrMsg;
 	
@@ -398,9 +449,9 @@ void filter_point_class::publish_viz(std::string field, int actIndx)
 		geoPt.x = 0; geoPt.y = 0; geoPt.z = 0;
 		markerMsg.points.push_back(geoPt);
 		
-		geoPt.x = actArr_[actIndx][0];
-		geoPt.y = actArr_[actIndx][1];
-		geoPt.z = actArr_[actIndx][2];
+		geoPt.x = repAct[0];
+		geoPt.y = repAct[1];
+		geoPt.z = repAct[2];
 		markerMsg.points.push_back(geoPt);
 
 		markerMsg.color.r = 1; 

@@ -42,6 +42,9 @@ private:
 	float foreVelDeadband_;
 	float timeOut_;
 	float successRadius_;
+  float attPotParaBound_;
+  float attGain_;
+  std::string mode_;
 	
 	// Local Variables
 	geometry_msgs::Point goalPoint_;
@@ -66,6 +69,9 @@ public:
 		while( !nh->getParam("holonomic", isHolonomic_) );
 		while( !nh->getParam("yaw_err_bound_nonzero_fore_vel_in_rad", foreVelDeadband_) );
 		while( !nh->getParam("pose_frame_id", worldFrameId_) );
+    while( !nh->getParam("parabolic_attractor_bound", attPotParaBound_) ); // only in apf mode
+    while( !nh->getParam("attractor_gain", attGain_) ); // only in apf mode
+    while( !nh->getParam("mode", mode_) ); // qmdp, apf
 		
 		ROS_INFO("%s: Parameters retrieved from parameter server", nh->getNamespace().c_str());
 		
@@ -100,7 +106,7 @@ public:
 	}
 	
 	// ************************************************
-	geometry_msgs::Vector3 transform_goal_to_base_flat(geometry_msgs::Point goalIn, geometry_msgs::Pose poseIn)
+	geometry_msgs::Vector3 transform_goal_to_base_flat(geometry_msgs::Point goalIn, geometry_msgs::Pose poseIn, std::string mode)
 	{
 		tf2::Transform baseFlatToWorld = base_flat_to_world(poseIn);
 		
@@ -115,10 +121,31 @@ public:
 		
 		tf2::Vector3 goalInBaseFlat = baseFlatToWorld.inverse() * tf2::Vector3(goalIn.x, goalIn.y, goalIn.z);
 		
-		geometry_msgs::Vector3 attVec = get_unit_vector(toMsg(goalInBaseFlat));
-		attVec.x *= maxVel_[0];
-		attVec.y *= maxVel_[0];
-		attVec.z *= maxVel_[1]; 
+		geometry_msgs::Vector3 attVec = toMsg(goalInBaseFlat);
+
+    if(mode == "qmdp")
+    {
+      attVec = get_unit_vector(attVec);
+			attVec.x *= maxVel_[0];
+			attVec.y *= maxVel_[0];
+			attVec.z *= maxVel_[1];
+    }
+    else if(mode == "apf")
+    {
+      if(get_magnitude(attVec) > attPotParaBound_) // conical attractive field
+      {
+        attVec = get_unit_vector(attVec);
+        attVec.x *= (attPotParaBound_*attGain_);
+        attVec.y *= (attPotParaBound_*attGain_);
+        attVec.z *= (attPotParaBound_*attGain_);
+      }
+      else // parabolic attractive field
+      {
+        attVec.x *= attGain_;
+        attVec.y *= attGain_;
+        attVec.z *= attGain_;
+      }
+    } 
 		
 		return attVec;
 	}
@@ -215,7 +242,7 @@ public:
 		
 		geometry_msgs::Pose currentPose = pose_;
 		
-		geometry_msgs::Vector3 attVecFlat = transform_goal_to_base_flat(goalPoint_, currentPose);
+		geometry_msgs::Vector3 attVecFlat = transform_goal_to_base_flat(goalPoint_, currentPose, mode_);
 		geometry_msgs::Vector3 repVecFlat = transform_rep_vec_to_base_flat(repVec_, currentPose);
 		
 		if ( ( point_dist_sq(currentPose.position, goalPoint_) < pow(successRadius_,2) ) && isEmpty(repVecFlat) )
@@ -227,13 +254,22 @@ public:
 		geometry_msgs::TwistStamped twistOutMsg;
 		
 		clear_msg(twistOutMsg);
-		twistOutMsg.twist.linear = add_vecs(attVecFlat, repVecFlat);
-			
-		std::cout << "Nonholonomic seperate repulsive and attractive messages"	<< std::endl;
+
+    if(mode_ == "apf")
+    {
+      twistOutMsg.twist.linear = get_unit_vector(add_vecs(attVecFlat, repVecFlat));
+      twistOutMsg.twist.linear.x *= maxVel_[0];
+      twistOutMsg.twist.linear.y *= maxVel_[0];
+      twistOutMsg.twist.linear.z *= maxVel_[1];
+    }
+    else if(mode_ == "qmdp")
+     twistOutMsg.twist.linear = add_vecs(attVecFlat, repVecFlat);	
+
+    std::cout << "Holonomic seperate attractive and repulsive messages"	<< std::endl;
 		std::cout << attVecFlat.x << ", " << attVecFlat.y << "," << attVecFlat.z << std::endl;	
-		std::cout << repVecFlat.x << ", " << repVecFlat.y << "," << repVecFlat.z << std::endl;	
+		std::cout << repVecFlat.x << ", " << repVecFlat.y << "," << repVecFlat.z << std::endl;
 		
-		std::cout << "Nonholonomic merged repulsive and attractive messages"	<< std::endl;
+		std::cout << "Holonomic merged attractive and repulsive messages"	<< std::endl;
 		std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl;
 		
 		bool nonHolSuccess = true;
@@ -245,14 +281,19 @@ public:
 			return;
 		}
 		
+    std::cout << "Non-Holonomic merged attractive and repulsive messages"	<< std::endl;
+		std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl;
+
 		twistOutMsg.twist = base_flat_to_world(twistOutMsg.twist, currentPose);
-		
+
 		twistOutMsg.header.stamp = ros::Time::now();
 		twistOutMsg.header.frame_id = worldFrameId_;
 		
 		twistOutPub_.publish(twistOutMsg);
 		
 		startCount_ = true;
+
+    std::cout << std::endl << std::endl;
 	}
 	
 	// ************************************************
@@ -314,7 +355,6 @@ public:
 		
 		double roll, pitch, yaw;
 		tf2::Matrix3x3(rotation).getRPY(roll, pitch, yaw);
-		//std::cout << "roll, pitch, yaw: " << roll << ", " << pitch << ", " << yaw << std::endl;
 		roll = 0; pitch = 0;
 		
 		rotation.setRPY(roll, pitch, yaw);
@@ -405,8 +445,13 @@ public:
 	geometry_msgs::Vector3 get_unit_vector(geometry_msgs::Vector3 vecIn)
 	{
 		float vecInMag = sqrt(pow(vecIn.x,2) + pow(vecIn.y,2) + pow(vecIn.z,2)); 
+
+    geometry_msgs::Vector3 vecOut;
+    vecOut.x = 0; vecOut.y = 0; vecOut.z = 0;
+
+    if(vecInMag == 0.0)
+      return vecOut;
 		
-		geometry_msgs::Vector3 vecOut;
 		vecOut.x = vecIn.x / vecInMag;
 		vecOut.y = vecIn.y / vecInMag;
 		vecOut.z = vecIn.z / vecInMag;

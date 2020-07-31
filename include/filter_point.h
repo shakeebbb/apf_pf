@@ -41,6 +41,7 @@ private:
 	ros::Publisher ptPub_;
 	ros::Publisher ptPivPub_;
 	ros::Publisher actPub_;
+  ros::Publisher forcePub_;
   ros::Publisher beliefPub_;
 	
 	tf2_ros::Buffer tfBuffer_;
@@ -81,6 +82,9 @@ private:
 	std::vector<double> minAct_; // x, y, yaw
 	std::vector<double> maxAct_;
 	std::vector<double> actInt_;
+
+  bool apfOut_;
+  bool qmdpOut_;
 		
 	// Distributions
 	std::discrete_distribution<int> voxBeliefDistr_;
@@ -146,8 +150,10 @@ public:
 	void extract_features(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr&);
 	bool point_to_voxel(const pcl::PointXYZ&, int&, int&, double&);
 	bool is_valid(const pcl::PointXYZ&);
-	void publish_viz(std::string = "all", int = 0);
+	void publish_viz(double*, std::string = "all");
 	void publish_action(int);
+  void publish_force(double*);
+  void publish_points();
 	void display(std::string, int);
 	double norm_pdf(double, double, double, bool = true);
 	void discretize_image();
@@ -163,6 +169,9 @@ public:
 	bool read_csv(std::string, Eigen::MatrixXd&, int, int);
 	bool read_csv(std::string, std::discrete_distribution<int>*, int, int);
 	bool write_csv(std::string, Eigen::MatrixXd);
+
+  geometry_msgs::Vector3 get_rep_force(int, double, double, double);
+  
 };
 	
 #endif

@@ -1,0 +1,12 @@
+att_vel: [0.6, 0.6, 1.0]
+rep_vec_timeout_secs: 1.0
+process_rate_secs: 0.067
+success_radius: 0.35
+holonomic: false
+yaw_err_bound_nonzero_fore_vel_in_rad: 1.57
+
+mode: apf
+parabolic_attractor_bound: 0.5 # used only in apf mode
+attractor_gain: 0.4 # used only in apf mode
+
+pose_frame_id: world

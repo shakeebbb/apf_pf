@@ -21,6 +21,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	ptPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_out", 100);
 	ptPivPub_ = nh->advertise<geometry_msgs::PointStamped>("pt_piv_out", 100);
 	actPub_ = nh->advertise<geometry_msgs::Vector3Stamped>("twist_out", 100);
+  forcePub_ = nh->advertise<geometry_msgs::Vector3Stamped>("force_out", 100);
   beliefPub_ = nh->advertise<std_msgs::Float64MultiArray>("belief_out", 100);
 	
 	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
@@ -246,6 +247,9 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 	while(!nh->getParam("read_from_file", readFromFile_));
 	
 	while(!nh->getParam("n_threads", nThreads_));
+
+  while(!nh->getParam("output_apf", apfOut_));
+  while(!nh->getParam("output_qmdp", qmdpOut_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
@@ -265,9 +269,20 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 	{
 		extract_features(msgPtr);
 		update_belief();
-		int actIndx = update_action();
-		publish_action(actIndx);
-		publish_viz("all", actIndx);
+  
+    if(qmdpOut_)
+    {
+			int actIndx = update_action();
+			publish_action(actIndx);
+      publish_viz(actArr_[actIndx], "all");
+    }
+    if(apfOut_)
+    {
+      double repForce[3];
+      publish_force(repForce);
+      publish_viz(repForce, "all");
+    }
+    publish_points();
 		display("beliefs", 3);
 	}
 	
