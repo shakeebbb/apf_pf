@@ -22,7 +22,7 @@
 	<arg name="world_frame" value="$(arg mav_name)/odom"/>
 
 	<!-- .................................................... -->
-	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="(arg log_output)">
+	<node ns="$(arg fore_cam_name)" if="$(arg launch_filter_point_fore)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="$(arg log_output)">
 			
 		<remap from="~/pt_cloud_in" to="depth/points"/>
 		<remap from="~/cam_info_in" to="depth/camera_info"/>
@@ -32,7 +32,7 @@
 		<remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
 		<remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 			
-		<rosparam command="load" file="$(find apf_pf)/configs/agg_cam_fp.yaml" subst_value="true"/>
+		<rosparam command="load" file="$(find apf_pf)/configs/ral_cam_fp.yaml" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 				
 	</node>
@@ -47,7 +47,7 @@
   </include>
 
 	<!-- .................................................... -->
-  <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="(arg log_output)">
+  <node ns="$(arg up_cam_name)" if="$(arg launch_filter_point_up)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="$(arg log_output)">
 
     <remap from="~/pt_cloud_in" to="stream/1/cloud"/>
     <remap from="~/cam_info_in" to="stream/1/camera_info"/>
@@ -65,7 +65,7 @@
                 args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
 
 	<!-- .................................................... -->
-  <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="(arg log_output)">
+  <node ns="$(arg down_cam_name)" if="$(arg launch_filter_point_down)" name="filter_point" pkg="apf_pf" type="filter_point_node" output="$(arg log_output)">
 
     <remap from="~/pt_cloud_in" to="stream/1/cloud"/>
     <remap from="~/cam_info_in" to="stream/1/camera_info"/>
@@ -91,7 +91,7 @@
 	</node>
 
 	<!-- .................................................... -->
-	<node if="$(arg launch_filter_point_control)" name="filter_point_control" pkg="apf_pf" type="goal_to_vel_node" output="(arg log_output)">
+	<node if="$(arg launch_filter_point_control)" name="filter_point_control" pkg="apf_pf" type="goal_to_vel_node" output="$(arg log_output)">
 		<rosparam param="att_vel"> [0.4, 0.4, 1.00] </rosparam>
 
 		<param name="rep_vec_timeout_secs" value="1.0"/>
