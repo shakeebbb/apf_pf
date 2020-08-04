@@ -484,6 +484,17 @@ void filter_point_class::publish_viz(double* repAct, std::string field)
     beliefPub_.publish(belief);
   }
 }
+
+// ***************************************************************************
+void filter_point_class::publish_compute_time(ros::Time& tic)
+{
+  ros::Duration elapsed = ros::Time::now() - tic;
+  std_msgs::Float32 elapsedSec; 
+  elapsedSec.data = elapsed.toSec(); 
+
+	//ROS_INFO("Time Elapsed: %f", elapsedSec.data);
+  computeTimePub_.publish(elapsedSec);
+}
 		
 // ***************************************************************************
 void filter_point_class::display(std::string field, int precision)

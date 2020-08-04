@@ -45,6 +45,7 @@ private:
   float attPotParaBound_;
   float attGain_;
   std::string mode_;
+  bool display_;
 	
 	// Local Variables
 	geometry_msgs::Point goalPoint_;
@@ -72,6 +73,7 @@ public:
     while( !nh->getParam("parabolic_attractor_bound", attPotParaBound_) ); // only in apf mode
     while( !nh->getParam("attractor_gain", attGain_) ); // only in apf mode
     while( !nh->getParam("mode", mode_) ); // qmdp, apf
+    while( !nh->getParam("display_cout", display_) );
 		
 		ROS_INFO("%s: Parameters retrieved from parameter server", nh->getNamespace().c_str());
 		
@@ -110,13 +112,16 @@ public:
 	{
 		tf2::Transform baseFlatToWorld = base_flat_to_world(poseIn);
 		
-		std::cout << "Base flat to world transform: " << tf2::toMsg(baseFlatToWorld).translation.x << ", " 
-																									<< tf2::toMsg(baseFlatToWorld).translation.y << ", " 
-																									<< tf2::toMsg(baseFlatToWorld).translation.z << ", " 
-																									<< tf2::toMsg(baseFlatToWorld).rotation.x << ", " 
-																									<< tf2::toMsg(baseFlatToWorld).rotation.y << ", " 
-																									<< tf2::toMsg(baseFlatToWorld).rotation.z << ", " 
-																									<< tf2::toMsg(baseFlatToWorld).rotation.w << std::endl;
+    if(display_)
+    {
+			std::cout << "Base flat to world transform: " << tf2::toMsg(baseFlatToWorld).translation.x << ", " 
+																										<< tf2::toMsg(baseFlatToWorld).translation.y << ", " 
+																										<< tf2::toMsg(baseFlatToWorld).translation.z << ", " 
+																										<< tf2::toMsg(baseFlatToWorld).rotation.x << ", " 
+																										<< tf2::toMsg(baseFlatToWorld).rotation.y << ", " 
+																										<< tf2::toMsg(baseFlatToWorld).rotation.z << ", " 
+																										<< tf2::toMsg(baseFlatToWorld).rotation.w << std::endl;
+    }
 		
 		
 		tf2::Vector3 goalInBaseFlat = baseFlatToWorld.inverse() * tf2::Vector3(goalIn.x, goalIn.y, goalIn.z);
@@ -184,7 +189,8 @@ public:
       goalPoint_.z = 0;
     }
     
-    std::cout << "Received Goal Point: " << goalPoint_.x << ", " << goalPoint_.y << "," << goalPoint_.z << std::endl;
+    if(display_)
+      std::cout << "Received Goal Point: " << goalPoint_.x << ", " << goalPoint_.y << "," << goalPoint_.z << std::endl;
 	}
 	
 	// ************************************************
@@ -211,8 +217,9 @@ public:
 		
 		if (get_magnitude(msgBase.vector) > get_magnitude(repVec_))
 			repVec_ = msgBase.vector;
-			
-		std::cout << "Received Rep Vector: " << repVec_.x << ", " << repVec_.y << "," << repVec_.z << std::endl;
+		
+    if(display_)	
+		  std::cout << "Received Rep Vector: " << repVec_.x << ", " << repVec_.y << "," << repVec_.z << std::endl;
 	}
 	
 	// ************************************************
@@ -237,8 +244,11 @@ public:
 			clear_msg(repVec_);
 		}
 		
-		std::cout << "Rep Vec Available: " << startCount_ << std::endl;
-		std::cout << "Time Elapsed: " << timeElapsedLastRepVec << std::endl;
+    if(display_)
+    {
+		  std::cout << "Rep Vec Available: " << startCount_ << std::endl;
+		  std::cout << "Time Elapsed: " << timeElapsedLastRepVec << std::endl;
+    }
 		
 		geometry_msgs::Pose currentPose = pose_;
 		
@@ -265,12 +275,15 @@ public:
     else if(mode_ == "qmdp")
      twistOutMsg.twist.linear = add_vecs(attVecFlat, repVecFlat);	
 
-    std::cout << "Holonomic seperate attractive and repulsive messages"	<< std::endl;
-		std::cout << attVecFlat.x << ", " << attVecFlat.y << "," << attVecFlat.z << std::endl;	
-		std::cout << repVecFlat.x << ", " << repVecFlat.y << "," << repVecFlat.z << std::endl;
+    if(display_)
+    {
+      std::cout << "Holonomic seperate attractive and repulsive messages"	<< std::endl;
+		  std::cout << attVecFlat.x << ", " << attVecFlat.y << "," << attVecFlat.z << std::endl;	
+		  std::cout << repVecFlat.x << ", " << repVecFlat.y << "," << repVecFlat.z << std::endl;
 		
-		std::cout << "Holonomic merged attractive and repulsive messages"	<< std::endl;
-		std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl;
+		  std::cout << "Holonomic merged attractive and repulsive messages"	<< std::endl;
+		  std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl;
+    }
 		
 		bool nonHolSuccess = true;
 		if (!isHolonomic_)
@@ -281,8 +294,11 @@ public:
 			return;
 		}
 		
-    std::cout << "Non-Holonomic merged attractive and repulsive messages"	<< std::endl;
-		std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl;
+    if(display_)
+    {
+      std::cout << "Non-Holonomic merged attractive and repulsive messages"	<< std::endl;
+		  std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl << std::endl;
+    }
 
 		twistOutMsg.twist = base_flat_to_world(twistOutMsg.twist, currentPose);
 
@@ -292,8 +308,6 @@ public:
 		twistOutPub_.publish(twistOutMsg);
 		
 		startCount_ = true;
-
-    std::cout << std::endl << std::endl;
 	}
 	
 	// ************************************************

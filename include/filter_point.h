@@ -9,6 +9,7 @@
 #include <omp.h>
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud2.h"
+#include "std_msgs/Float32.h"
 #include "std_msgs/Float64MultiArray.h"
 #include "pcl/PCLPointCloud2.h"
 #include "pcl/point_cloud.h"
@@ -43,6 +44,7 @@ private:
 	ros::Publisher actPub_;
   ros::Publisher forcePub_;
   ros::Publisher beliefPub_;
+  ros::Publisher computeTimePub_;
 	
 	tf2_ros::Buffer tfBuffer_;
   tf2_ros::TransformListener* tfListenerPtr_;
@@ -116,10 +118,13 @@ private:
 	double lookaheadT_;
 	double deltaT_;
 	
-	// File IO
+	// IO
 	std::fstream* fout_;
 	std::string filePath_;
 	bool readFromFile_;
+
+  bool display_;
+  bool viz_;
 	
 	// Parallelization
 	int nThreads_;
@@ -154,6 +159,7 @@ public:
 	void publish_action(int);
   void publish_force(double*);
   void publish_points();
+  void publish_compute_time(ros::Time&);
 	void display(std::string, int);
 	double norm_pdf(double, double, double, bool = true);
 	void discretize_image();

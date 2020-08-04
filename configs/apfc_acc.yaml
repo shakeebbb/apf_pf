@@ -9,4 +9,6 @@ mode: apf
 parabolic_attractor_bound: 0.5 # used only in apf mode
 attractor_gain: 0.4 # used only in apf mode
 
+display_cout: false
+
 pose_frame_id: world

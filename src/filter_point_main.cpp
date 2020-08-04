@@ -23,6 +23,7 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	actPub_ = nh->advertise<geometry_msgs::Vector3Stamped>("twist_out", 100);
   forcePub_ = nh->advertise<geometry_msgs::Vector3Stamped>("force_out", 100);
   beliefPub_ = nh->advertise<std_msgs::Float64MultiArray>("belief_out", 100);
+  computeTimePub_ = nh->advertise<std_msgs::Float32>("compute_time_out", 100);
 	
 	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	
@@ -250,6 +251,9 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 
   while(!nh->getParam("output_apf", apfOut_));
   while(!nh->getParam("output_qmdp", qmdpOut_));
+
+  while(!nh->getParam("display_cout", display_));
+  while(!nh->getParam("publish_viz", viz_));
 	
 	ROS_INFO("Parameters for filter_point retreived from the parameter server");
 }
@@ -257,7 +261,7 @@ void filter_point_class::wait_for_params(ros::NodeHandle *nh)
 // ***************************************************************************
 void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& msgPtr)
 {
-	ros::Time begin = ros::Time::now();
+	ros::Time tic = ros::Time::now();
 	
 	if(msgPtr->height == 1)
 	{
@@ -270,20 +274,29 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 		extract_features(msgPtr);
 		update_belief();
   
+    double repVec[3];
+
+    if(apfOut_)
+    {
+      publish_force(repVec);
+    }
     if(qmdpOut_)
     {
 			int actIndx = update_action();
 			publish_action(actIndx);
-      publish_viz(actArr_[actIndx], "all");
+
+      repVec[0] = actArr_[actIndx][0];
+      repVec[1] = actArr_[actIndx][1];
+      repVec[2] = actArr_[actIndx][2];
     }
-    if(apfOut_)
-    {
-      double repForce[3];
-      publish_force(repForce);
-      publish_viz(repForce, "all");
-    }
+    
+    publish_compute_time(tic);
     publish_points();
-		display("beliefs", 3);
+
+    if(viz_)
+      publish_viz(repVec, "all");
+    if(display_)
+		  display("beliefs", 3);
 	}
 	
 	if((isInitialized_ & 0x01) != 0x01)
@@ -300,9 +313,6 @@ void filter_point_class::pt_cloud_cb(const pcl::PointCloud<pcl::PointXYZ>::Const
 		
 		isInitialized_ |= 0x01;
 	}
-	
-	ros::Duration elapsed = ros::Time::now() - begin;
-	ROS_INFO("Time Elapsed: %f", elapsed.toSec());
 }
 
 // ***************************************************************************
@@ -319,7 +329,7 @@ void filter_point_class::cam_info_cb(const sensor_msgs::CameraInfo::ConstPtr& ms
 			//std::cout << camInfoP_[i] << ", ";
 		}
 		
-		std::cout << std::endl;
+		//std::cout << std::endl;
 		
 		isInitialized_ |= 0x02;
 	}
