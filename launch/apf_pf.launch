@@ -1,23 +1,32 @@
 <launch>
 
 	<arg name="mav_name" default="$(env ROS_NAMESPACE)" /> 
-        <arg name="log_output" default="screen"/>
+  <arg name="log_output" default="screen"/>
 
-  <arg name="qmdp" default="false" doc="false for apf_mode"/>
-
-	<arg name="fore_cam_name" default="$(env TOF_FORE_NAME)"/>
+  <arg name="fore_cam_name" default="$(env TOF_FORE_NAME)"/>
 	<arg name="up_cam_name" default="$(env TOF_UP_NAME)"/>
 	<arg name="down_cam_name" default="$(env TOF_DOWN_NAME)"/>
-	
-	<arg name="launch_filter_point_fore" default="true"/>
+
+  <arg name="bag_file_with_path" default="/media/shakeeb/shakeeb/acc_test1.bag"/>
+  <arg name="rviz_file_with_path" default="/home/shakeeb/Desktop/acc.rviz"/>
+  <arg name="launch_bag" default="true"/>
+  <arg name="launch_rviz" default="true"/>
+  <arg name="launch_depth_noiser" default="false"/>
+  <arg name="launch_img_marker" default="false"/>
+  
+  <arg name="fp_config_path" default="$(find apf_pf)/configs"/>
+	<arg name="launch_filter_point_fore" default="false"/>
 	<arg name="launch_filter_point_up" default="false"/>
 	<arg name="launch_filter_point_down" default="false"/>
+  <arg name="launch_depth_to_cloud" default="false" doc="realsense requires conversion from depth to ordered ptcloud"/>
+  <arg name="launch_filter_point_control" default="false"/>
+ 
+  <arg name="fore_fp_config" default="static_cable_apf_acc.yaml"/>
+  <arg name="up_fp_config" default="apf_acc.yaml"/>
+  <arg name="down_fp_config" default="apf_acc.yaml"/>
+  <arg name="fpc_config" default="apfc_acc.yaml"/>
 
-  <arg name="launch_depth_to_cloud" default="true"/>
-
-	<arg name="launch_depth_noiser" default="false"/>
-	
-	<arg name="launch_filter_point_control" default="false"/>
+  <arg name="qmdp" default="false" doc="rep_vec_out is used in qmdp mode, force_out is used in apf mode"/>
 	
 	<arg name="imu_frame" value="$(arg mav_name)/imu_link"/>
 	<arg name="base_frame" value="$(arg mav_name)/base_link"/>
@@ -35,8 +44,7 @@
 		<remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
 		<remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 
-		<rosparam unless="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/static_cable_apf_acc.yaml" subst_value="true"/>
-    <rosparam if="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/qmdp_ral.yaml" subst_value="true"/>
+		<rosparam command="load" file="$(arg fp_config_path)/$(arg fore_fp_config)" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 				
 	</node>
@@ -45,14 +53,15 @@
 		args="filter_point/force_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
   <node if="$(arg qmdp)" name="relay" pkg="topic_tools" type="relay"
 		args="filter_point/rep_vec_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
+  </group>
 
-  <include if="$(arg launch_depth_to_cloud)" file="$(find apf_pf)/launch/depth_to_cloud.launch">
+  <!-- .................................................... -->
+  <include if="$(arg launch_depth_to_cloud)" ns="$(arg fore_cam_name)" file="$(find apf_pf)/launch/depth_to_cloud.launch">
    <arg name="cam_info_topic" value="depth/camera_info"/>
    <arg unless="$(arg launch_depth_noiser)" name="depth_img_topic" value="depth/image_rect_raw"/>
    <arg if="$(arg launch_depth_noiser)" name="depth_img_topic" value="depth/image_rect_raw_noisy"/>
-   <arg name="pt_cloud_topic" value="depth/points"/>
+   <arg name="pt_cloud_topic" value="depth/points_clipped"/>
   </include>
-  </group>
 
 	<!-- .................................................... -->
   <group if="$(arg launch_filter_point_up)" ns="$(arg up_cam_name)">
@@ -66,8 +75,7 @@
     <remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
     <remap from="~/twist_out" to="filter_point/rep_vec_out"/>
     
-    <rosparam unless="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/apf_acc.yaml" subst_value="true"/>
-    <rosparam if="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/qmdp_ral.yaml" subst_value="true"/>
+    <rosparam command="load" file="$(arg fp_config_path)/$(arg up_fp_config)" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 
   </node>
@@ -90,8 +98,7 @@
     <remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
     <remap from="~/twist_out" to="filter_point/rep_vec_out"/>
 
-    <rosparam unless="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/apf_acc.yaml" subst_value="true"/>
-    <rosparam if="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/qmdp_ral.yaml" subst_value="true"/>
+    <rosparam command="load" file="$(arg fp_config_path)/$(arg down_fp_config)" subst_value="true"/>
 		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
 
   </node>
@@ -103,18 +110,23 @@
   </group>
 
 	<!-- .................................................... -->
-  <node name="depth_noiser" if="$(arg launch_depth_noiser)" ns="$(env TOF_FORE_NAME)" pkg="depth_noiser" type="depth_noiser_node" output="$(arg log_output)" clear_params="true">
+  <node name="depth_noiser" if="$(arg launch_depth_noiser)" ns="$(arg fore_cam_name)" pkg="depth_noiser" type="depth_noiser_node" output="$(arg log_output)" clear_params="true">
 
     <remap from="~/depth_image" to="depth/image_rect_raw"/>
     <remap from="~/noised_depth" to="depth/image_rect_raw_noisy"/>
 
-    <param name="constant_noise" value="0.2"/>
+    <param name="constant_noise" value="0.0"/>
     <param name="linear_noise" value="0.000"/>
     <param name="quadratic_noise" value="0.000"/>
     
-    <param name="z_max_for_noise_addition" value="1"/>
-    <param name="z_min_for_noise_addition" value="0.1"/>
-    <param name="pixel_interval_for_noise_addition" value="500"/>
+    <param name="z_max_for_noise_addition" value="1.2"/>
+    <param name="z_min_for_noise_addition" value="1.2"/>
+    <param name="pixel_interval_for_noise_addition" value="10"/>
+
+    <param name="clip_depth_after" value="1.2"/>
+    <param name="clip_depth_before" value="0.01"/>
+
+    <param name="add_noise_everywhere" value="false"/>
 
     <param name="depth_units" value="mm"/> <!-- "mm", "m" -->
 
@@ -122,8 +134,7 @@
 
 	<!-- .................................................... -->
 	<node if="$(arg launch_filter_point_control)" name="filter_point_control" pkg="apf_pf" type="goal_to_vel_node" output="$(arg log_output)" clear_params="true">
-    <rosparam unless="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/apfc_acc.yaml" subst_value="true"/>
-    <rosparam if="$(arg qmdp)" command="load" file="$(find apf_pf)/configs/qmdpc_ral.yaml" subst_value="true"/>
+    <rosparam command="load" file="$(arg config_path)/$(arg fpc_config)" subst_value="true"/>
 		<param name="pose_frame_id" value="$(arg world_frame)"/>
 			
 		<remap from="~/pose_in" to="mavros/local_position/pose"/>
@@ -134,6 +145,22 @@
 		<remap from="~/twist_out" to="drone_pose/twist_set_in"/>
 	</node>
 
+  <!-- .................................................... -->
+  <node if="$(arg launch_img_marker)" ns="$(arg fore_cam_name)" name="img_marker" pkg="apf_pf" type="img_marker_node" output="screen">
+		<remap from="~/img_in" to="color/image_raw"/>
+    <remap from="~/cam_info_in" to="color/camera_info"/>
+		<remap from="~/belief_in" to="filter_point/belief_out"/>
+    <remap from="~/belief_cam_info_in" to="depth/camera_info"/>
+
+		<param name="pixel_interval" value="50"/>
+    <param name="distance_interval" value="0.1"/>
+	</node>
+
 	<!-- .................................................... -->
-	
+  <node pkg="rosbag" if="$(arg launch_bag)" type="play" name="player" output="screen" args="--clock --pause $(arg bag_file_with_path) -l">
+    <param name="/use_sim_time" value="true"/>
+	</node>
+
+  <!-- .................................................... -->
+  <node type="rviz" if="$(arg launch_rviz)" name="rviz" pkg="rviz" args="-d $(arg rviz_file_with_path)" />
 </launch>

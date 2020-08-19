@@ -88,7 +88,7 @@ void img_cb(const sensor_msgs::ImageConstPtr& msg)
       pcl::PointXYZ point3b = project_to_3d(pcl::PointXYZ(pixX+pixInt_,pixY+pixInt_,pixZ), beliefCamInfo_, true);
       pcl::PointXYZ point2b = project_to_3d(point3b, camInfo_, false);
 
-      rectangle(cv_ptr->image, cv::Point(point2a.x, point2a.y), cv::Point(point2b.x, point2b.y), CV_RGB(255*belief_[indx],0,0), 5);
+      rectangle(cv_ptr->image, cv::Point(point2a.x, point2a.y), cv::Point(point2b.x, point2b.y), CV_RGB(0,0,255*belief_[indx]), 5);
     }
   }
 

@@ -17,7 +17,7 @@ n_particles_vox: 20000
 outliers_per_voxel: 10
 
 trans_noise_sdev: [8, 0.4] # voxels, distance
-obsv_noise_sdev: [110, 2] # confidence points, nOutliers
+obsv_noise_sdev: [300, 1] # confidence points, nOutliers
 
 max_action_values: [0.0, 0.6, 0.6] 
 min_action_values: [-0.6, -0.6, -0.6]

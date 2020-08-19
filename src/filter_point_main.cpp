@@ -10,6 +10,8 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
 	camInfoSub_ = nh->subscribe("cam_info_in", 1, &filter_point_class::cam_info_cb, this);
 	//twistSub_ = nh->subscribe("twist_in", 1, &filter_point_class::twist_cb, this);
 	//imuSub_ = nh->subscribe("imu_in", 1, &filter_point_class::imu_cb, this);
+
+  tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	
 	isInitialized_ = 0x00;
 	
@@ -24,8 +26,6 @@ filter_point_class::filter_point_class(ros::NodeHandle* nh)
   forcePub_ = nh->advertise<geometry_msgs::Vector3Stamped>("force_out", 100);
   beliefPub_ = nh->advertise<std_msgs::Float64MultiArray>("belief_out", 100);
   computeTimePub_ = nh->advertise<std_msgs::Float32>("compute_time_out", 100);
-	
-	tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
 	
 	ROS_INFO("Setting up voxel and observation array ...");
 	discretize_image();
