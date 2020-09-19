@@ -7,37 +7,37 @@
 	<arg name="up_cam_name" default="$(env TOF_UP_NAME)"/>
 	<arg name="down_cam_name" default="$(env TOF_DOWN_NAME)"/>
 
-  <arg name="bag_file_with_path" default="/media/shakeeb/shakeeb/acc_test1.bag"/>
+  <arg name="bag_file_with_path" default="/home/shakeeb/edgar_filtered.bag"/>
   <arg name="rviz_file_with_path" default="/home/shakeeb/Desktop/acc.rviz"/>
-  <arg name="launch_bag" default="true"/>
-  <arg name="launch_rviz" default="true"/>
+  <arg name="launch_bag" default="false"/>
+  <arg name="launch_rviz" default="false"/>
   <arg name="launch_depth_noiser" default="false"/>
-  <arg name="launch_img_marker" default="false"/>
+  <arg name="launch_img_marker" default="true"/>
   
   <arg name="fp_config_path" default="$(find apf_pf)/configs"/>
-	<arg name="launch_filter_point_fore" default="false"/>
+	<arg name="launch_filter_point_fore" default="true"/>
 	<arg name="launch_filter_point_up" default="false"/>
 	<arg name="launch_filter_point_down" default="false"/>
   <arg name="launch_depth_to_cloud" default="false" doc="realsense requires conversion from depth to ordered ptcloud"/>
-  <arg name="launch_filter_point_control" default="false"/>
+  <arg name="launch_filter_point_control" default="true"/>
  
-  <arg name="fore_fp_config" default="static_cable_apf_acc.yaml"/>
-  <arg name="up_fp_config" default="apf_acc.yaml"/>
-  <arg name="down_fp_config" default="apf_acc.yaml"/>
-  <arg name="fpc_config" default="apfc_acc.yaml"/>
+  <arg name="fore_fp_config" default="qmdp_jint.yaml"/>
+  <arg name="up_fp_config" default="qmdp_jint.yaml"/>
+  <arg name="down_fp_config" default="qmdp_jint.yaml"/>
+  <arg name="fpc_config" default="qmdpc_jint.yaml"/>
 
-  <arg name="qmdp" default="false" doc="rep_vec_out is used in qmdp mode, force_out is used in apf mode"/>
+  <arg name="qmdp" default="true" doc="rep_vec_out is used in qmdp mode, force_out is used in apf mode"/>
 	
 	<arg name="imu_frame" value="$(arg mav_name)/imu_link"/>
 	<arg name="base_frame" value="$(arg mav_name)/base_link"/>
-	<arg name="world_frame" value="$(arg mav_name)/odom"/>
+	<arg name="world_frame" value="world"/>
 
 	<!-- .................................................... -->
   <group if="$(arg launch_filter_point_fore)" ns="$(arg fore_cam_name)">
 	<node name="filter_point" pkg="apf_pf" type="filter_point_node" output="$(arg log_output)" clear_params="true">
 			
-		<remap from="~/pt_cloud_in" to="depth/points"/>
-		<remap from="~/cam_info_in" to="depth/camera_info"/>
+		<remap from="~/pt_cloud_in" to="camera_depth/depth/points"/>
+		<remap from="~/cam_info_in" to="camera_depth/depth/camera_info"/>
 			
 		<remap from="~/viz_out" to="filter_point/viz_out"/>
 		<remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
@@ -60,7 +60,7 @@
    <arg name="cam_info_topic" value="depth/camera_info"/>
    <arg unless="$(arg launch_depth_noiser)" name="depth_img_topic" value="depth/image_rect_raw"/>
    <arg if="$(arg launch_depth_noiser)" name="depth_img_topic" value="depth/image_rect_raw_noisy"/>
-   <arg name="pt_cloud_topic" value="depth/points_clipped"/>
+   <arg name="pt_cloud_topic" value="depth/points"/>
   </include>
 
 	<!-- .................................................... -->
@@ -134,8 +134,9 @@
 
 	<!-- .................................................... -->
 	<node if="$(arg launch_filter_point_control)" name="filter_point_control" pkg="apf_pf" type="goal_to_vel_node" output="$(arg log_output)" clear_params="true">
-    <rosparam command="load" file="$(arg config_path)/$(arg fpc_config)" subst_value="true"/>
+    <rosparam command="load" file="$(arg fp_config_path)/$(arg fpc_config)" subst_value="true"/>
 		<param name="pose_frame_id" value="$(arg world_frame)"/>
+    <param name="base_frame_id" value="$(arg base_frame)"/>
 			
 		<remap from="~/pose_in" to="mavros/local_position/pose"/>
 			
@@ -157,7 +158,7 @@
 	</node>
 
 	<!-- .................................................... -->
-  <node pkg="rosbag" if="$(arg launch_bag)" type="play" name="player" output="screen" args="--clock --pause $(arg bag_file_with_path) -l">
+  <node pkg="rosbag" if="$(arg launch_bag)" type="play" name="player" output="screen" args="--clock --pause $(arg bag_file_with_path) -l -q">
     <param name="/use_sim_time" value="true"/>
 	</node>
 

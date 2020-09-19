@@ -35,3 +35,6 @@ base_frame_id: base_link
 
 output_apf: false
 output_qmdp: true
+
+publish_viz: true
+display_cout: false

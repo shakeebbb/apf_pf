@@ -12,3 +12,6 @@ attractor_gain: 0.4 # used only in apf mode
 display_cout: false
 
 pose_frame_id: world
+
+base_frame_id: base_link
+pose_frame_output: true

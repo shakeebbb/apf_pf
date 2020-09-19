@@ -37,6 +37,7 @@ private:
 	// Params
 	std::vector<float> maxVel_; //x,z,yaw
 	std::string worldFrameId_;
+  std::string baseFrameId_;
 	float pubRate_;
 	bool isHolonomic_;
 	float foreVelDeadband_;
@@ -46,6 +47,7 @@ private:
   float attGain_;
   std::string mode_;
   bool display_;
+  bool worldFrameOut_;
 	
 	// Local Variables
 	geometry_msgs::Point goalPoint_;
@@ -70,10 +72,12 @@ public:
 		while( !nh->getParam("holonomic", isHolonomic_) );
 		while( !nh->getParam("yaw_err_bound_nonzero_fore_vel_in_rad", foreVelDeadband_) );
 		while( !nh->getParam("pose_frame_id", worldFrameId_) );
+    while( !nh->getParam("base_frame_id", baseFrameId_) );
     while( !nh->getParam("parabolic_attractor_bound", attPotParaBound_) ); // only in apf mode
     while( !nh->getParam("attractor_gain", attGain_) ); // only in apf mode
     while( !nh->getParam("mode", mode_) ); // qmdp, apf
     while( !nh->getParam("display_cout", display_) );
+    while( !nh->getParam("pose_frame_output", worldFrameOut_) );
 		
 		ROS_INFO("%s: Parameters retrieved from parameter server", nh->getNamespace().c_str());
 		
@@ -300,10 +304,17 @@ public:
 		  std::cout << twistOutMsg.twist.linear.x << ", " << twistOutMsg.twist.linear.y << "," << twistOutMsg.twist.linear.z << std::endl << std::endl;
     }
 
-		twistOutMsg.twist = base_flat_to_world(twistOutMsg.twist, currentPose);
+    twistOutMsg.header.stamp = ros::Time::now();
 
-		twistOutMsg.header.stamp = ros::Time::now();
-		twistOutMsg.header.frame_id = worldFrameId_;
+    if(worldFrameOut_)
+    {
+		  twistOutMsg.twist = base_flat_to_world(twistOutMsg.twist, currentPose);
+      twistOutMsg.header.frame_id = worldFrameId_;
+    }
+    else
+    {
+      twistOutMsg.header.frame_id = baseFrameId_;
+    }
 		
 		twistOutPub_.publish(twistOutMsg);
 		
