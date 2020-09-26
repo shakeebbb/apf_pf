@@ -24,8 +24,8 @@ min_action_values: [-0.8, -0.8, -0.8]
 action_intervals: [0.2, 0.2, 0.2]
 
 reward_Q: [0.7, 0.7, 0.7]
-repulsive_potential_max_distance: 1.4 # corners of voxel grid maybe more than max_distance, check obstacle at the boundary after changing for reverse potential
-repulsive_potential_gain: 2
+repulsive_potential_max_distance: 1.8 # corners of voxel grid maybe more than max_distance, check obstacle at the boundary after changing for reverse potential
+repulsive_potential_gain: 2.0
 
 alpha_vector_iterations: 20
 

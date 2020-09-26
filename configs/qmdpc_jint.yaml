@@ -1,7 +1,7 @@
 att_vel: [0.6, 0.6, 1.3]
 rep_vec_timeout_secs: 1.0
 process_rate_secs: 0.067
-success_radius: 0.35
+success_radius: 1.2
 holonomic: false
 yaw_err_bound_nonzero_fore_vel_in_rad: 1.57
 
