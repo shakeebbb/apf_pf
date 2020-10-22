@@ -31,21 +31,21 @@ The package provides a framework to generate 3D velocity commands directly from 
 ~min_action_values: Minimum velocities in x,y and z directions (only in qmdp mode) \
 ~action_intervals: Discretization intervals for the velocities in x,y and z directions (only in qmdp mode)
 
-reward_Q: Reward Q matrix (diagonal) (only in qmdp mode) \
-repulsive_potential_max_distance: Maximum effective repulsive potential distance \
-repulsive_potential_gain: Repulsive potential gain 
+~reward_Q: Reward Q matrix (diagonal) (only in qmdp mode) \
+~repulsive_potential_max_distance: Maximum effective repulsive potential distance \
+~repulsive_potential_gain: Repulsive potential gain 
 
-alpha_vector_iterations: Number of iterations for alpha vector update (only in qmdp mode)
+~alpha_vector_iterations: Number of iterations for alpha vector update (only in qmdp mode)
 
-lookahead_time: Lookahead time to calculate the reward (only in qmdp mode) \
-sampling_time: Sampling time for the lookahead path to calculate the reward (only in qmdp mode) \
-base_frame_id: Robot body frame id
+~lookahead_time: Lookahead time to calculate the reward (only in qmdp mode) \
+~sampling_time: Sampling time for the lookahead path to calculate the reward (only in qmdp mode) \
+~base_frame_id: Robot body frame id
 
-output_apf: True enables apf mode \
-output_qmdp: True enables qmdp mode 
+~output_apf: True enables apf mode \
+~output_qmdp: True enables qmdp mode 
 
-publish_viz: True enables RViz visualization msg out \
-display_cout: True enables verbose
+~publish_viz: True enables RViz visualization msg out \
+~display_cout: True enables verbose
 
 ## 2.2 goal_to_vel_node
 
