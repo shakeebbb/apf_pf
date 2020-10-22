@@ -1,5 +1,5 @@
 # 1. Overview
-The package provides a framework to generate 3D velocity commands directly from a depth image stream.
+The package provides a framework to generate 3D velocity commands directly from a depth image stream. 
 
 # 2. Nodes
 
@@ -50,12 +50,12 @@ display_cout: True enables verbose
 ## 2.2 goal_to_vel_node
 
 ### 2.1.1 Subscribed Topics
-~/pose_in: Robot position in. \
-~/goal_pt_in: Goal point in. \
-~/rep_vec_in: Repulsive velocity/force in from filter_point_node. \
+~pose_in: Robot position in. \
+~goal_pt_in: Goal point in. \
+~rep_vec_in: Repulsive velocity/force in from filter_point_node. 
 
 ### 2.1.2 Published Topics
-~/twist_out: Final velocity action for the robot.
+~twist_out: Final velocity action for the robot.
 
 ### 2.2.3 Parameters
 ~att_vel: Forward vertical and yaw rates for the attractor pull \
