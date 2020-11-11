@@ -1,5 +1,5 @@
 # 1. Overview
-The package provides a framework to generate 3D velocity commands directly from a depth image stream. The work is currently under review has two modes 'apf' and 'qmdp'. The discussion about the 'apf' mode is provided in the manuscript
+The package provides a framework to generate 3D velocity commands directly from a depth image stream. The work is currently under review and has two modes 'apf' and 'qmdp'. The discussion about the 'apf' mode is provided in the manuscript
 
 @article{ahmad2020apf, \
   title={APF-PF: Probabilistic Depth Perception for 3D Reactive Obstacle Avoidance}, \
