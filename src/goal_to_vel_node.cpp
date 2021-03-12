@@ -2,11 +2,15 @@
 #include "ros/ros.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "geometry_msgs/PointStamped.h"
+#include "geometry_msgs/Point.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "sensor_msgs/Imu.h"
 #include "tf2/LinearMath/Transform.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "nav_msgs/Path.h"
+
+#include <eigen3/Eigen/Core>
 
 // ------------------------------------------------------
 
@@ -21,9 +25,12 @@ private:
 	
 	// Publishers, Subscribers, Transforms, Timers
 	ros::Publisher twistOutPub_;
+  ros::Publisher lookaheadPub_;
 	
 	ros::Subscriber goalSub_;
 	ros::Subscriber repSub_;
+
+  ros::Subscriber pathSub_;
 	
 	ros::Subscriber poseSub_;
 	
@@ -48,6 +55,7 @@ private:
   std::string mode_;
   bool display_;
   bool worldFrameOut_;
+  double lookaheadDist_;
 	
 	// Local Variables
 	geometry_msgs::Point goalPoint_;
@@ -58,6 +66,7 @@ private:
 	bool startCount_;
 	int timeElapsedLastRepVec_;
 	
+  nav_msgs::Path rosPath_;
 public:
 
 	// ************************************************
@@ -78,14 +87,18 @@ public:
     while( !nh->getParam("mode", mode_) ); // qmdp, apf
     while( !nh->getParam("display_cout", display_) );
     while( !nh->getParam("pose_frame_output", worldFrameOut_) );
+    
+    while( !nh->getParam("lookahead_point_distance", lookaheadDist_) );
 		
 		ROS_INFO("%s: Parameters retrieved from parameter server", nh->getNamespace().c_str());
 		
 		twistOutPub_ = nh->advertise<geometry_msgs::TwistStamped>("twist_out", 10);
+    lookaheadPub_ = nh_->advertise<geometry_msgs::PointStamped>("lookahead_out", 10);
 		
 		goalSub_ = nh->subscribe("goal_pt_in", 1, &goal_to_vel_class::goal_cb, this);
 		repSub_ = nh->subscribe("rep_vec_in", 1, &goal_to_vel_class::rep_cb, this);
-		
+    pathSub_ = nh_->subscribe("path_in", 1, &goal_to_vel_class::path_cb, this);		
+
 		poseSub_ = nh->subscribe("pose_in", 1, &goal_to_vel_class::pose_cb, this);
 		
 		tfListenerPtr_ = new tf2_ros::TransformListener(tfBuffer_);
@@ -101,6 +114,147 @@ public:
 		startCount_ = true;
 		timeElapsedLastRepVec_ = 0;
 	}
+	// ************************************************
+  void path_cb(const nav_msgs::Path& msg)
+  {
+    rosPath_ = msg;
+
+    if( (msg.poses.size() == 0) && ((isInitialized_ & 0x02) != 0x02) ) // if no valid path is ever received
+      return; 
+
+    if(msg.poses.size() == 0) // don't change goalPoint_, publish the same lookahead
+    {
+      geometry_msgs::PointStamped lookaheadOut;
+      lookaheadOut.header.frame_id = worldFrameId_;
+      lookaheadOut.header.stamp = ros::Time::now();
+      lookaheadOut.point = goalPoint_;
+      lookaheadPub_.publish(lookaheadOut);
+      return;
+    }
+
+    try
+		{
+			geometry_msgs::TransformStamped worldToPath = tfBuffer_.lookupTransform(msg.header.frame_id, worldFrameId_, ros::Time(0));
+			
+			geometry_msgs::Pose pathFramePose;
+      tf2::doTransform(pose_, pathFramePose, worldToPath);
+ 
+      int res = 5;
+      Eigen::MatrixXd path = interpolate(msg, res);
+
+      //std::cout << "Interpolated Path: " << path << std::endl;
+
+      goalPoint_ = get_lookahead(path, lookaheadDist_);	
+
+      //std::cout << "Lookahead Point: " << goalPoint_.x << ", " << goalPoint_.y << ", " << goalPoint_.z << std::endl;
+
+      tf2::Transform worldToPathTf;
+      tf2::fromMsg(worldToPath.transform, worldToPathTf);
+      geometry_msgs::TransformStamped pathToWorld;
+      pathToWorld.transform = tf2::toMsg(worldToPathTf.inverse());
+
+			tf2::doTransform(goalPoint_, goalPoint_, pathToWorld); 
+
+      geometry_msgs::PointStamped lookaheadOut;
+      lookaheadOut.header.frame_id = worldFrameId_;
+      lookaheadOut.header.stamp = ros::Time::now();
+      lookaheadOut.point = goalPoint_;
+      lookaheadPub_.publish(lookaheadOut);
+			
+      if( (isInitialized_ & 0x02) != 0x02 )
+			isInitialized_ |= 0x02;
+    }
+    catch (tf2::TransformException &ex)
+    { 
+      ROS_WARN_THROTTLE(1, "%s",ex.what());
+      goalPoint_.x = 0;
+      goalPoint_.y = 0;
+      goalPoint_.z = 0;
+    }
+  }
+
+  // ***************************************************************************
+  geometry_msgs::Point get_lookahead(Eigen::MatrixXd& path, double len)
+  {
+    int nInPts = path.rows();
+
+    if(nInPts == 0)
+    {
+      geometry_msgs::Point pt;
+      pt.x = 0, pt.y = 0; pt.z = 0;
+      return pt;
+    }
+
+    if(nInPts == 1)
+    {
+      geometry_msgs::Point pt;
+      pt.x = path(0,0), pt.y = path(0,1); pt.z = path(0,2);
+      return pt;
+    }
+
+    Eigen::Vector3d robPos (pose_.position.x, 
+                            pose_.position.y, 
+                            pose_.position.z);
+  
+    Eigen::VectorXd distVec = (path.rowwise() - robPos.transpose()).rowwise().squaredNorm(); // distance of each point from robot
+
+    int minDistIndx;
+    distVec.minCoeff(&minDistIndx); // indx of closest point
+
+    int indx; // indx of point 1m from min dist point
+    ( distVec.bottomRows(path.rows()-minDistIndx).array() - pow(lookaheadDist_,2) ).cwiseAbs().minCoeff(&indx);
+
+    indx = indx + minDistIndx;
+
+    // publish lookahead point
+    geometry_msgs::Point lookahead;
+
+    lookahead.x = path(indx,0);
+    lookahead.y = path(indx,1);
+    lookahead.z = path(indx,2);
+
+    return lookahead;
+  }
+
+  // ***************************************************************************
+  Eigen::MatrixXd interpolate(const nav_msgs::Path& path, int res) // res: number of points per segment
+  {
+    int nInPts = path.poses.size();
+
+    if(nInPts == 0)
+      return Eigen::MatrixXd(0,0);
+    if(nInPts == 1)
+    {
+      Eigen::MatrixXd mat(1,3);
+      mat(0,0) = path.poses[0].pose.position.x;
+      mat(0,1) = path.poses[0].pose.position.y;
+      mat(0,2) = path.poses[0].pose.position.z;
+      return mat;
+    }
+
+    Eigen::MatrixXd pathOut(res*(nInPts-1)+1, 3);
+
+    double delTheta = 1/double(res);
+
+    int count = 0;
+    Eigen::Vector3d pos1, pos2;
+    for(int i=0; i<(nInPts-1); i++)
+    {
+      for(double theta=0; theta<1; theta+=delTheta)
+      {
+        pos1 = Eigen::Vector3d(path.poses[i].pose.position.x, path.poses[i].pose.position.y, path.poses[i].pose.position.z);
+        pos2 = Eigen::Vector3d(path.poses[i+1].pose.position.x, path.poses[i+1].pose.position.y, path.poses[i+1].pose.position.z);
+        pathOut.row(count) = (1-theta)*pos1 + theta*pos2;
+
+        count++;
+      }
+    }
+
+    pathOut.bottomRows(1)(0,0) = path.poses.back().pose.position.x;
+    pathOut.bottomRows(1)(0,1) =  path.poses.back().pose.position.y;
+    pathOut.bottomRows(1)(0,2) = path.poses.back().pose.position.z;
+    return pathOut;
+  }
 
 	// ************************************************
 	void pose_cb(const geometry_msgs::PoseStamped& msg)
@@ -234,6 +388,8 @@ public:
 			ROS_WARN_THROTTLE(1, "%s : Waiting for first lookahead point ...", nh_->getNamespace().c_str());
 			return;
 		}
+
+    path_cb(rosPath_);
 		
 		static float timeElapsedLastRepVec = 0;
 		

@@ -13,5 +13,7 @@ display_cout: false
 
 pose_frame_id: world
 
+lookahead_point_distance: 2.0
+
 base_frame_id: base_link
-pose_frame_output: true
+pose_frame_output: false

@@ -6,17 +6,17 @@ n_threads: 1
 
 distance_interval: 0.1
 
-pixel_interval: 50
+pixel_interval: 30
 
 min_distance: 0.1 # cannot be zero to avoid repulsive potential nans
 
-max_distance: 1.2
+max_distance: 1.0
 
 n_particles_vox: 20000
 
 outliers_per_voxel: 10
 
-trans_noise_sdev: [8, 0.4] # voxels, distance
+trans_noise_sdev: [4, 0.4] # voxels, distance
 obsv_noise_sdev: [300, 1] # confidence points, nOutliers
 
 max_action_values: [0.0, 0.6, 0.6] 
