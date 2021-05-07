@@ -1,0 +1,67 @@
+<launch>
+
+  <arg name="mav_name" default="A01" />
+	<arg name="cam_name" default="tof_fore"/>
+
+  <arg name="bag_file_with_path" default="/home/shakeeb/static_cable.bag"/>
+  <arg name="launch_bag" default="true"/>
+
+  <include file="$(find apf_pf)/launch/depth_to_cloud.launch">
+   <arg name="cam_info_topic" value="/$(arg mav_name)/$(arg cam_name)/depth/camera_info"/>
+   <arg name="depth_img_topic" value="/$(arg mav_name)/$(arg cam_name)/depth/image_rect_raw_noisy"/>
+   <arg name="pt_cloud_topic" value="/$(arg mav_name)/$(arg cam_name)/depth/points"/>
+  </include>
+
+  <node name="depth_noiser" pkg="depth_noiser" type="depth_noiser_node">
+
+    <remap from="~/depth_image" to="/$(arg mav_name)/$(arg cam_name)/depth/image_rect_raw"/>
+    <remap from="~/noised_depth" to="/$(arg mav_name)/$(arg cam_name)/depth/image_rect_raw_noisy"/>
+
+    <param name="constant_noise" value="0.0"/>
+    <param name="linear_noise" value="0.000"/>
+    <param name="quadratic_noise" value="0.000"/>
+    
+    <param name="z_max_for_noise_addition" value="1.1"/>
+    <param name="z_min_for_noise_addition" value="0.1"/>
+    <param name="pixel_interval_for_noise_addition" value="10"/>
+
+    <param name="clip_depth_after" value="1.25"/>
+    <param name="clip_depth_before" value="0.001"/>
+
+    <param name="add_noise_everywhere" value="false"/>
+
+    <param name="depth_units" value="mm"/> <!-- "mm", "m" -->
+
+  </node>
+
+  <node pkg="apf_pf" type="loc_noiser" name="loc_noiser" clear_params="true">
+    <param name="rate" value="5"/>
+    <param name="source_frame_id" value="$(arg mav_name)/base_link"/>
+    <param name="target_frame_id" value="world"/>
+
+    <rosparam param="mean_position"> [0,0,2] </rosparam> />
+    <rosparam param="standard_deviation"> [0.05,0.05,0.05] </rosparam> />
+   
+    <param name="/use_sim_time" value="true"/>
+  </node>
+
+	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
+		<param name="resolution" value="0.05" />
+		
+		<param name="frame_id" type="string" value="world" />
+		
+		<param name="sensor_model/max_range" value="1.2" />
+    <param name="sensor_model/hit" value="0.7" />
+    <param name="sensor_model/miss" value="0.4" />
+
+		<remap from="cloud_in" to="/$(arg mav_name)/$(arg cam_name)/depth/points" /> 
+	
+	</node>
+
+  <node pkg="rosbag" if="$(arg launch_bag)" type="play" name="player" output="screen" args="--clock --pause $(arg bag_file_with_path) -l">
+    <param name="/use_sim_time" value="true"/>
+	</node>
+
+  <!--node pkg="tf2_ros" type="static_transform_publisher" name="foreCam2body" args="0 0 0 -1.57 0 -1.57 $(arg mav_name)/base_link $(arg mav_name)/tof_fore_depth_optical_frame"/-->
+
+</launch>

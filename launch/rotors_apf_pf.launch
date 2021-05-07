@@ -1,0 +1,102 @@
+<launch>
+
+	<arg name="mav_name" default="$(env ROS_NAMESPACE)" /> 
+  <arg name="log_output" default="screen"/>
+  
+  <arg name="fore_cam_name" default="$(env TOF_FORE_NAME)"/>
+
+  <arg name="launch_depth_noiser" default="false"/>
+  
+  <arg name="fp_config_path" default="$(find apf_pf)/configs"/>
+  <arg name="fore_fp_config" default="qmdp_jint.yaml"/>
+  <arg name="fpc_config" default="qmdpc_jint.yaml"/>
+  <arg name="qmdp" default="true" doc="rep_vel_out is used in qmdp mode, force_out is used in apf mode"/>
+	
+	<arg name="base_frame" value="$(arg mav_name)/base_link"/>
+	<arg name="world_frame" value="world"/>
+
+  <!-- ................... ADD NOISE TO THE DEPTH IMAGES ................................. -->
+
+  <node name="depth_noiser" if="$(arg launch_depth_noiser)" ns="$(arg fore_cam_name)" pkg="depth_noiser" type="depth_noiser_node" output="$(arg log_output)">
+
+    <remap from="~/depth_image" to="camera_depth/depth/disparity"/>
+    <remap from="~/noised_depth" to="camera_depth/depth/noisy_disparity"/>
+
+    <param name="constant_noise" value="0.1"/>
+    <param name="linear_noise" value="0.000"/>
+    <param name="quadratic_noise" value="0.000"/>
+    
+    <param name="z_max_for_noise_addition" value="1.1"/>
+    <param name="z_min_for_noise_addition" value="0.1"/>
+    <param name="pixel_interval_for_noise_addition" value="10"/> <!-- Add noise after every ___ pixels -->
+
+    <param name="clip_depth_after" value="1.350"/>
+    <param name="clip_depth_before" value="0.001"/>
+
+    <param name="add_noise_everywhere" value="false"/>
+
+    <param name="depth_units" value="m"/> <!-- Input image units "mm", "m" -->
+
+  </node>
+
+  <!-- .................... CONVERT DEPTH IMAGES TO ORDERED POINTCLOUDS ................................ -->
+
+  <include ns="$(arg fore_cam_name)" file="$(find apf_pf)/launch/depth_to_cloud.launch">
+   <arg name="cam_info_topic" value="camera_depth/depth/camera_info"/>
+   <arg if="$(arg launch_depth_noiser)" name="depth_img_topic" value="camera_depth/depth/noisy_disparity"/>
+   <arg unless="$(arg launch_depth_noiser)" name="depth_img_topic" value="camera_depth/depth/disparity"/>
+   <arg name="pt_cloud_topic" value="camera_depth/depth/noisy_points"/>
+  </include>
+
+	<!-- .................... GENERATE REPULSIVE ACTIONS USING POMDP ................................ -->
+
+  <group ns="$(arg fore_cam_name)">
+	<node name="filter_point" pkg="apf_pf" type="filter_point_node" output="$(arg log_output)">
+			
+		<remap from="~/pt_cloud_in" to="camera_depth/depth/noisy_points"/>
+		<remap from="~/cam_info_in" to="camera_depth/depth/camera_info"/>
+			
+		<remap from="~/viz_out" to="filter_point/viz_out"/>
+		<remap from="~/pt_out" to="filter_point/closest_point_filtered"/>
+		<remap from="~/pt_piv_out" to="filter_point/closest_point_raw"/>
+		<remap from="~/twist_out" to="filter_point/rep_vel_out"/>
+    
+		<rosparam command="load" file="$(arg fp_config_path)/$(arg fore_fp_config)" subst_value="true"/>
+		<param name="base_frame_id" type="string" value="$(arg base_frame)"/>
+				
+	</node>
+  
+	<node unless="$(arg qmdp)" name="relay" pkg="topic_tools" type="relay"
+		args="filter_point/force_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
+  <node if="$(arg qmdp)" name="relay" pkg="topic_tools" type="relay"
+		args="filter_point/rep_vel_out /$(arg mav_name)/filter_point_control/rep_vec_in"/>
+  </group>
+
+	<!-- .................... CLOSE THE LOOP WITH THE GOAL POINT ................................ -->
+
+	<node name="filter_point_control" pkg="apf_pf" type="goal_to_vel_node" output="$(arg log_output)">
+    <rosparam command="load" file="$(arg fp_config_path)/$(arg fpc_config)" subst_value="true"/>
+		<param name="pose_frame_id" value="$(arg world_frame)"/>
+    <param name="base_frame_id" value="$(arg base_frame)"/>
+			
+		<remap from="~/pose_in" to="ground_truth/pose_stamped"/>
+			
+		<remap from="~/goal_pt_in" to="lookahead_point"/>	
+		<remap from="~/rep_vec_in" to="filter_point_control/rep_vec_in"/>
+    
+		<remap from="~/twist_out" to="drone_pose/twist_set_in"/>
+	</node>
+
+  <!-- ................... CONVERT ROTOR_S GROUNDTRUTH POSE TO POSESTAMPED................................. -->
+
+	<node name="pose_to_posestamped" pkg="ros_conversions" type="pose_to_posestamped" output="$(arg log_output)">
+			<remap from="pose_to_posestamped/pose_in" to="ground_truth/pose"/>
+			<remap from="pose_to_posestamped/posestamped_in" to="abc"/>
+			
+			<remap from="pose_to_posestamped/pose_out" to="pose_to_posestamped/pose_out"/>
+			<remap from="pose_to_posestamped/posestamped_out" to="ground_truth/pose_stamped"/>
+			
+			<param name="frame_id" value="$(arg world_frame)"/>
+	</node>
+
+</launch>
