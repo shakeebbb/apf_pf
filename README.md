@@ -13,19 +13,19 @@ The package provides a framework to generate 3D velocity commands directly from 
 ## 2.1 filter_point_node
 
 ### 2.1.1 Subscribed Topics
-~pt_cloud_in: Ordered pointcloud from the depth camera in optical frame. \
-~cam_info_in: Camera info topic from the depth camera. 
+~pt_cloud_in: Ordered pointcloud representation of depth images in a depth camera's optical frame \
+~cam_info_in: Camera info topic from the depth camera
 
 ### 2.1.2 Published Topics
-~viz_out: Vizualization topic. \
-~pt_out: Most probable location of the occupied region inside the depth image stream. \
-~twist_out: Repulsive velocity out. (in qmdp mode) \
-~force_out: Repulsive force out. (in apf mode)
+~viz_out: Vizualization topic \
+~pt_out: Most probable location of the occupied region inside the depth image stream \
+~twist_out: Repulsive velocity out (in qmdp mode) \
+~force_out: Repulsive force out (in apf mode)
 
 ### 2.1.3 Parameters
 ~read_from_file: Read transition, reward and alpha vector matrices from a file \
 ~matrices_file_path: Folder to save the transition, reward and alpha vector matrices \
-~n_threads: Number of threads to run multi-thread \
+~n_threads: Number of threads to run multi-thread (OpenMP is required to to use multiple threads) \
 ~distance_interval: Discretization interval \
 ~pixel_interval: Discretization interval \
 ~min_distance: Mininimum depth horizon \
@@ -82,5 +82,73 @@ The package provides a framework to generate 3D velocity commands directly from 
 
 ~base_frame_id: Robot body frame id \
 ~pose_frame_output: True enables the output in pose/world frame
+
+# 3. Installation
+
+3.1 Install ROS with RViz and Gazebo by following the instructions on [this link](http://wiki.ros.org/melodic/Installation/Ubuntu). The package is tested on ROS Melodic and Ubuntu 18.04.5 LTS. \
+3.2 Create a ROS workspace as follows
+```
+$ mkdir -p ~/catkin_ws/src
+$ cd ~/catkin_ws/src
+```
+3.3 Install `rotors_simulator` package from https://github.com/ethz-asl/rotors_simulator \
+3.4 Install `depth_image_proc` package from apt `sudo apt install ros-melodic-depth-image-proc` or from source (http://wiki.ros.org/depth_image_proc)
+
+3.5 Clone the package and its dependencies
+```
+$ cd ~/catkin_ws/src
+$ git clone -b apf_pf_doc https://github.com/shakeebbb/apf_pf
+$ git clone -b apf_pf_doc https://github.com/shakeebbb/depth_noiser
+$ git clone -b apf_pf_doc https://github.com/shakeebbb/ros_conversions
+$ git clone -b apf_pf_doc https://github.com/shakeebbb/drone_pose
+```
+3.6 Build the workspace using `python_catkin_tools` (you may need to install `python_catkin_tools`)
+```
+$ cd ~/catkin_ws/
+$ catkin build
+```
+3.7 Source the ROS workspace
+```
+$ echo "source ~/catkin_ws/devel/setup.bash" >> ~/.bashrc
+$ source ~/.bashrc
+```
+
+# 4. Basic Usage
+
+4.1 Open a terminal and run the simulator 
+```
+$ roslaunch apf_pf rotors_sim.launch
+```
+4.2 Open a new terminal and run `apf_pf`
+```
+$ export ROS_NAMESPACE=iris
+$ export TOF_FORE_NAME=vi_sensor
+$ roslaunch apf_pf rotors_apf_pf.launch launch_depth_noiser:=false
+```
+4.3 Open a new terminal and run velocity controller for the `rotors_simulator`
+```
+$ export ROS_NAMESPACE=iris
+$ roslaunch drone_pose rotors_vel_control.launch
+```
+4.4 Open a new terminal and run rviz to checkout the visualizations
+```
+$ rosrun rviz rviz -d ~/catkin_ws/src/apf_pf/rviz/rotors_config.rviz
+```
+4.5 Open a new terminal and publish a desired goal point for the robot. IMPORTANT: Wait for the next message to appear after `[ INFO] [xxxx.xx, xxxx.xxx]: Computing alpha vectors ...` inside the terminal running `apf_pf`, before sending the goal point.
+```
+$ rostopic pub -r 10 /iris/lookahead_point geometry_msgs/PointStamped "header:
+  seq: 0
+  stamp:
+    secs: 0
+    nsecs: 0
+  frame_id: 'world'
+point:
+  x: 100.0
+  y: 0.0
+  z: 1.5"
+```
+4.6 An instance of the simulation run obtained following the preceding steps is shown [here](https://youtu.be/Kl1Lc7xIMuE) for reference.
+
+ 
 
 
