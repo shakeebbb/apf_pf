@@ -1,12 +1,28 @@
 # 1. Overview
-The package provides a framework to generate 3D velocity commands directly from a depth image stream. The work is currently under review and has two modes 'apf' and 'qmdp'. The discussion about the 'apf' mode is provided in the manuscript
+The package provides a framework to generate 3D velocity commands directly from a depth image stream. A part of this work is currently under review and has two modes 'apf' and 'qmdp'. The discussion about the 'apf' mode is provided in the paper
 
-@article{ahmad2020apf, \
-  title={APF-PF: Probabilistic Depth Perception for 3D Reactive Obstacle Avoidance}, \
-  author={Ahmad, Shakeeb and Sunberg, Zachary N and Humbert, J Sean}, \
-  journal={arXiv preprint arXiv:2010.08063}, \
-  year={2020}
+```
+@inproceedings{ahmad2021apf,
+  title={APF-PF: Probabilistic Depth Perception for 3D Reactive Obstacle Avoidance},
+  author={Ahmad, Shakeeb and Sunberg, Zachary N and Humbert, J Sean},
+  booktitle={2021 Annual American Control Conference (ACC)},
+  year={2021},
+  organization={IEEE},
+  note={To appear (preprint available at: arXiv:2010.08063)}
 }
+```
+
+'qmdp' mode is detailed in the article
+
+```
+@article{ahmad2021depth,
+  title={End-to-End Probabilistic Depth Perception and 3D Obstacle Avoidance using POMDP},
+  author={Ahmad, Shakeeb and Sunberg, Zachary N and Humbert, J Sean},
+  journal={Journal of Intelligent and Robotic Systems},
+  year={2021},
+  note={Under review}
+}
+```
 
 # 2. Nodes
 
@@ -125,6 +141,8 @@ $ export ROS_NAMESPACE=iris
 $ export TOF_FORE_NAME=vi_sensor
 $ roslaunch apf_pf rotors_apf_pf.launch launch_depth_noiser:=false
 ```
+To inject noise into the depth image pixels, launch `apf_pf` above with `launch_depth_noiser:=true` and set `constant_noise`, `linear_noise` and `quadratic_noise` parameters inside the `rotors_apf_pf.launch` to the desired values. \
+Note: Depth noiser adds latency to the depth information depending on the hardware it is being run on. \
 4.3 Open a new terminal and run velocity controller for the `rotors_simulator`
 ```
 $ export ROS_NAMESPACE=iris
