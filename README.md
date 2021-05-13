@@ -8,7 +8,7 @@ The package provides a framework to generate 3D velocity commands directly from 
   booktitle={2021 Annual American Control Conference (ACC)},
   year={2021},
   organization={IEEE},
-  note={To appear (preprint available at: arXiv:2010.08063)}
+  note={Preprint available at: arXiv:2010.08063}
 }
 ```
 
