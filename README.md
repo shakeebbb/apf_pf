@@ -3,24 +3,27 @@ The package provides a framework to generate 3D velocity commands directly from 
 
 ```
 @inproceedings{ahmad2021apf,
-  title={APF-PF: Probabilistic Depth Perception for 3D Reactive Obstacle Avoidance},
+  title={Apf-pf: Probabilistic depth perception for 3d reactive obstacle avoidance},
   author={Ahmad, Shakeeb and Sunberg, Zachary N and Humbert, J Sean},
-  booktitle={2021 Annual American Control Conference (ACC)},
+  booktitle={2021 American Control Conference (ACC)},
+  pages={32--39},
   year={2021},
-  organization={IEEE},
-  note={Preprint available at: arXiv:2010.08063}
+  organization={IEEE}
 }
 ```
 
 'qmdp' mode is detailed in the article
 
 ```
-@article{ahmad2021depth,
+@article{ahmad2021end,
   title={End-to-End Probabilistic Depth Perception and 3D Obstacle Avoidance using POMDP},
   author={Ahmad, Shakeeb and Sunberg, Zachary N and Humbert, J Sean},
-  journal={Journal of Intelligent and Robotic Systems},
+  journal={Journal of Intelligent \& Robotic Systems},
+  volume={103},
+  number={2},
+  pages={1--18},
   year={2021},
-  note={Under review}
+  publisher={Springer}
 }
 ```
 
